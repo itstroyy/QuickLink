@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 # Quicklink
 
 Quicklink is one reusable QR landing-page platform for local businesses. Client information lives in Supabase, so adding or editing a client never requires a new page file or redeployment.
@@ -75,7 +74,3 @@ Open [http://localhost:3000](http://localhost:3000).
 4. Add `quicklinkqr.com` under **Project Settings → Domains** and follow Vercel’s DNS instructions.
 
 Business changes made through the admin dashboard do not require another deployment. Only platform code or `NEXT_PUBLIC_` environment changes do.
-=======
-# QuickLink
-QuickLink is a website for my buisness which allows you to scan a QR code and get all you're links for social media, google review, payment methods and so much more!
->>>>>>> e6e7b10909f0e7cf07855b219816844e584726bd
