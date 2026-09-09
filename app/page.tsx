@@ -10,9 +10,11 @@ const links = [
   ['Google reviews', Star], ['Booking', Store], ['Instagram', Camera], ['Call business', Phone], ['Directions', MapPin], ['QR code', QrCode], ['Live analytics', BarChart3], ['Smart updates', Zap],
 ] as const
 
+const defaultContactPhone = '+18453901785'
+
 export default function Home() {
   const [menuOpen, setMenuOpen] = useState(false)
-  const contactPhone = process.env.NEXT_PUBLIC_CONTACT_PHONE?.trim()
+  const contactPhone = process.env.NEXT_PUBLIC_CONTACT_PHONE?.trim() || defaultContactPhone
   const contactEmail = process.env.NEXT_PUBLIC_CONTACT_EMAIL?.trim()
   const phoneHref = contactPhone ? `tel:${contactPhone.replace(/[^+\d]/g, '')}` : undefined
   const smsHref = contactPhone ? `sms:${contactPhone.replace(/[^+\d]/g, '')}?body=${encodeURIComponent("Hi! I'm interested in a Quicklink page for my business.")}` : undefined
