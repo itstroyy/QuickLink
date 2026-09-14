@@ -1,0 +1,21 @@
+'use client'
+
+import { useState } from 'react'
+import { CheckCircle2, Loader2, PackageCheck, XCircle } from 'lucide-react'
+import { formatDateTime, formatPhone } from '@/lib/display-format'
+import { orderReference } from '@/lib/order-manage-client'
+
+type ManagedOrder = { id:string; customer_name:string; customer_phone:string; fulfillment_method:string; address:string|null; notes:string|null; total_cents:number; status:string; created_at:string; business_name:string; items:Array<{product_name:string;unit_price_cents:number;quantity:number}> }
+
+export default function OrderManageCard({token,order}:{token:string;order:ManagedOrder}) {
+  const [status,setStatus]=useState(order.status);const[busy,setBusy]=useState(false);const[error,setError]=useState('')
+  async function cancel(){if(!window.confirm('Cancel this order?'))return;setBusy(true);setError('');const response=await fetch('/api/orders/manage/cancel',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({token})});const result=await response.json();setBusy(false);if(!response.ok)setError(result.error||'Unable to cancel this order.');else setStatus('cancelled')}
+  const cancellable=status==='new'
+  return <main className="min-h-screen bg-[#f6f3ed] px-5 py-12 text-[#1d1d1b]"><section className="mx-auto max-w-lg overflow-hidden rounded-3xl border border-[#ded8cc] bg-white shadow-[0_24px_70px_rgba(38,28,17,.12)]"><div className="border-b border-[#e8e2d8] bg-[#1d1d1b] px-6 py-7 text-white"><p className="text-xs font-semibold uppercase tracking-[.18em] text-[#d19a6a]">Quicklink order</p><h1 className="mt-2 text-2xl font-semibold">Manage your order</h1></div><div className="p-6 sm:p-8"><div className="flex items-start gap-4"><span className="grid size-12 shrink-0 place-items-center rounded-2xl bg-[#f2e8db] text-[#9a6339]"><PackageCheck size={22}/></span><div><h2 className="text-xl font-semibold">{order.business_name}</h2><p className="mt-1 text-sm text-[#77776f]">Order #{orderReference(order.id)}</p></div></div>
+    <dl className="mt-7 grid gap-3 rounded-2xl bg-[#faf8f3] p-5 text-sm"><Row label="Customer" value={order.customer_name}/><Row label="Phone" value={formatPhone(order.customer_phone)}/><Row label="Created" value={formatDateTime(order.created_at)}/><Row label="Fulfillment" value={`${order.fulfillment_method==='delivery'?'Delivery':'Pickup'}${order.address?` · ${order.address}`:''}`}/>{order.notes&&<Row label="Notes" value={order.notes}/>}<div className="flex justify-between gap-4"><dt className="text-[#77776f]">Status</dt><dd className={`rounded-full px-2.5 py-1 text-xs font-semibold capitalize ${status==='cancelled'?'bg-red-50 text-red-700':status==='completed'?'bg-emerald-50 text-emerald-700':'bg-sky-50 text-sky-700'}`}>{status}</dd></div></dl>
+    <div className="mt-5 divide-y rounded-2xl border border-[#e8e2d8] px-4">{order.items.map((item,index)=><div key={`${item.product_name}-${index}`} className="flex justify-between gap-3 py-3 text-sm"><span>{item.quantity}× {item.product_name}</span><strong>${((item.unit_price_cents*item.quantity)/100).toFixed(2)}</strong></div>)}<div className="flex justify-between py-4"><strong>Total</strong><strong>${(order.total_cents/100).toFixed(2)}</strong></div></div>
+    {error&&<p className="mt-4 rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p>}
+    {status==='cancelled'?<div className="mt-6 flex items-center gap-2 rounded-xl bg-[#faf8f3] px-4 py-3 text-sm font-medium"><CheckCircle2 size={18} className="text-[#9a6339]"/>This order has been cancelled.</div>:cancellable?<button type="button" disabled={busy} onClick={cancel} className="mt-6 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-red-200 text-sm font-semibold text-red-700 disabled:opacity-50">{busy?<Loader2 size={17} className="animate-spin"/>:<XCircle size={17}/>} {busy?'Cancelling…':'Cancel order'}</button>:<p className="mt-6 rounded-xl bg-[#faf8f3] px-4 py-3 text-sm text-[#77776f]">This order can no longer be cancelled online. Please contact the business.</p>}
+  </div></section></main>
+}
+function Row({label,value}:{label:string;value:string}){return <div className="flex justify-between gap-4"><dt className="text-[#77776f]">{label}</dt><dd className="text-right font-medium">{value}</dd></div>}

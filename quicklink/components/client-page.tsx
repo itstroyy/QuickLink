@@ -6,6 +6,8 @@ import { LinkIcon, resolveLinkIcon } from '@/components/link-icon'
 import QuicklinkLogo from '@/components/quicklink-logo'
 import { themeBackgrounds } from '@/lib/themes'
 import type { Business, BusinessLink } from '@/lib/types'
+import type { PublicHubData } from '@/lib/types'
+import ClientModules from '@/components/client-modules'
 
 const themeLabels = {
   minimal: 'Quiet confidence',
@@ -16,8 +18,9 @@ const themeLabels = {
 }
 
 const quickActionTypes = ['phone', 'sms', 'tiktok', 'menu', 'website']
+const QUICKLINK_URL = 'https://quicklink.host'
 
-export default function ClientPage({ business, links }: { business: Business; links: BusinessLink[] }) {
+export default function ClientPage({ business, links, hubData }: { business: Business; links: BusinessLink[]; hubData?: PublicHubData }) {
   const [copied, setCopied] = useState(false)
   const radius = business.border_radius === 'round' ? 'rounded-[2rem]' : business.border_radius === 'sharp' ? 'rounded-lg' : 'rounded-2xl'
   const internalTypes = ['phone', 'sms', 'email']
@@ -28,11 +31,16 @@ export default function ClientPage({ business, links }: { business: Business; li
   const backdropUrl = business.cover_url || (isBarbershop ? '/images/barbershop-background.png' : themeBackgrounds[business.theme])
 
   useEffect(() => {
-    fetch('/api/analytics', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ businessId: business.id, eventType: 'page_view' }), keepalive: true }).catch(() => {})
+    let visitorId = ''
+    try { visitorId = localStorage.getItem('quicklink_visitor') || crypto.randomUUID(); localStorage.setItem('quicklink_visitor', visitorId) } catch {}
+    fetch('/api/analytics', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ businessId: business.id, eventType: 'page_view', visitorId }), keepalive: true }).catch(() => {})
   }, [business.id])
 
-  function record(linkId: string) {
-    fetch('/api/analytics', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ businessId: business.id, linkId, eventType: 'link_click' }), keepalive: true }).catch(() => {})
+  function record(link: BusinessLink) {
+    const eventType = link.type === 'phone' ? 'call_click' : link.type === 'sms' ? 'text_click' : link.type === 'directions' ? 'directions_click' : link.type === 'google_review' ? 'review_click' : ['instagram','facebook','tiktok','youtube'].includes(link.type) ? 'social_click' : 'link_click'
+    let visitorId = ''
+    try { visitorId = localStorage.getItem('quicklink_visitor') || crypto.randomUUID(); localStorage.setItem('quicklink_visitor', visitorId) } catch {}
+    fetch('/api/analytics', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ businessId: business.id, linkId: link.id, eventType, visitorId, metadata: { link_type: link.type } }), keepalive: true }).catch(() => {})
   }
 
   async function sharePage() {
@@ -60,13 +68,15 @@ export default function ClientPage({ business, links }: { business: Business; li
       '--muted-text': business.secondary_text_color,
     } as React.CSSProperties}
   >
-    {backdropUrl && <div className="client-photo-backdrop" style={{ backgroundImage: `url(${JSON.stringify(backdropUrl)})` }}/>} 
+    {backdropUrl && <div className="client-photo-backdrop" style={{ backgroundImage: `url(${JSON.stringify(backdropUrl)})` }}/>}
     <div className="client-scene" aria-hidden="true"><span/><span/><span/></div>
     <div className="client-noise" aria-hidden="true"/>
 
     <div className="relative z-10 mx-auto max-w-[590px]">
       <header className="client-topbar mb-5 flex items-center justify-between">
-        <QuicklinkLogo className="text-base" markClassName="border border-white/15 bg-black/45 text-[var(--accent)] backdrop-blur-xl"/>
+        <a href={QUICKLINK_URL} target="_blank" rel="noreferrer" aria-label="Quicklink — powers this page">
+          <QuicklinkLogo className="text-base" markClassName="border border-white/15 bg-black/45 text-[var(--accent)] backdrop-blur-xl"/>
+        </a>
         <div className="flex items-center gap-2">
           <button type="button" onClick={sharePage} className="client-top-icon" aria-label="Share this page">{copied ? <Check size={17}/> : <Share2 size={17}/>}</button>
         </div>
@@ -92,7 +102,7 @@ export default function ClientPage({ business, links }: { business: Business; li
             {mainLinks.map((link, index) => <a
               key={link.id}
               href={link.url}
-              onClick={() => record(link.id)}
+              onClick={() => record(link)}
               target={internalTypes.includes(link.type) ? '_self' : '_blank'}
               rel="noreferrer"
               className={`client-link group ${radius} ${/review/i.test(`${link.label} ${link.url}`) ? 'client-link-featured' : ''}`}
@@ -105,11 +115,13 @@ export default function ClientPage({ business, links }: { business: Business; li
           </div>
 
           {quickActions.length > 1 && <div className="client-quick-actions mt-7">
-            {quickActions.map((link) => <a key={`quick-${link.id}`} href={link.url} onClick={() => record(link.id)} target={internalTypes.includes(link.type) ? '_self' : '_blank'} rel="noreferrer" className="client-quick-action">
+            {quickActions.map((link) => <a key={`quick-${link.id}`} href={link.url} onClick={() => record(link)} target={internalTypes.includes(link.type) ? '_self' : '_blank'} rel="noreferrer" className="client-quick-action">
               <span><LinkIcon name={resolveLinkIcon(link)} size={23}/></span>
               <small>{link.type === 'sms' ? 'Text' : link.type === 'phone' ? 'Call' : link.type === 'booking' ? 'Book' : link.label.replace(/^(Follow (us )?on|Visit|View|Our)\s+/i, '').split(' ')[0]}</small>
             </a>)}
           </div>}
+
+          {hubData && <ClientModules businessId={business.id} businessName={business.name} data={hubData}/>}
 
           {(business.address || business.email) && <div className="client-details mt-7">
             {business.address && <div><LinkIcon name="directions" size={16}/><span>{business.address}</span></div>}
@@ -118,7 +130,12 @@ export default function ClientPage({ business, links }: { business: Business; li
         </div>
       </section>
 
-      <footer className="mt-5 flex items-center justify-center gap-2 text-[10px] font-medium uppercase tracking-[.16em]"><span>Powered by</span><QuicklinkLogo className="text-[11px] normal-case tracking-tight" markClassName="size-6 rounded-lg border border-white/15 bg-black/45"/></footer>
+      <footer className="mt-5 flex items-center justify-center gap-2 text-[10px] font-medium uppercase tracking-[.16em]">
+        <span>Powered by</span>
+        <a href={QUICKLINK_URL} target="_blank" rel="noreferrer" aria-label="Quicklink — powers this page">
+          <QuicklinkLogo className="text-[11px] normal-case tracking-tight" markClassName="size-6 rounded-lg border border-white/15 bg-black/45"/>
+        </a>
+      </footer>
     </div>
   </main>
 }

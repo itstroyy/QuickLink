@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useCallback, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { ArrowDown, ArrowLeft, ArrowUp, ImagePlus, Loader2, Plus, Save, Trash2 } from 'lucide-react'
 import Link from 'next/link'
@@ -8,6 +8,7 @@ import { LinkIcon, linkIconOptions } from '@/components/link-icon'
 import { createClient } from '@/lib/supabase/client'
 import { normalizeContactLink, slugify, standardLinks } from '@/lib/links'
 import { themeBackgrounds, themeNames, themePresets } from '@/lib/themes'
+import { EditorSaveProvider } from '@/components/editor-save-context'
 import type { Business, BusinessLink, BusinessTheme } from '@/lib/types'
 
 type DraftLink = Pick<BusinessLink, 'type' | 'label' | 'url' | 'icon' | 'enabled'>
@@ -18,7 +19,7 @@ const blankBusiness = {
   ...themePresets.minimal,
 }
 
-export default function ClientForm({ initialBusiness, initialLinks = [], duplicateBusiness }: { initialBusiness?: Business; initialLinks?: BusinessLink[]; duplicateBusiness?: Business }) {
+export default function ClientForm({ initialBusiness, initialLinks = [], duplicateBusiness, businessFeatures }: { initialBusiness?: Business; initialLinks?: BusinessLink[]; duplicateBusiness?: Business; businessFeatures?: React.ReactNode }) {
   const router = useRouter()
   const [business, setBusiness] = useState({ ...blankBusiness, ...(duplicateBusiness ?? {}), ...(initialBusiness ?? {}) })
   const [links, setLinks] = useState<DraftLink[]>(() => {
@@ -30,6 +31,8 @@ export default function ClientForm({ initialBusiness, initialLinks = [], duplica
   const [coverFile, setCoverFile] = useState<File | null>(null)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+  const featureSaveRef = useRef<(() => Promise<void>) | null>(null)
+  const registerFeatureSave = useCallback((handler: (() => Promise<void>) | null) => { featureSaveRef.current = handler }, [])
   const isEditing = Boolean(initialBusiness)
   const previewLinks = links.filter((link) => link.enabled && link.url.trim()).slice(0, 4)
   const radius = business.border_radius === 'round' ? 'rounded-3xl' : business.border_radius === 'sharp' ? 'rounded-md' : 'rounded-xl'
@@ -101,6 +104,7 @@ export default function ClientForm({ initialBusiness, initialLinks = [], duplica
         const { error: linkError } = await supabase.from('business_links').insert(readyLinks.map((link, index) => ({ ...link, business_id: saved.id, display_order: index })))
         if (linkError) throw linkError
       }
+      await featureSaveRef.current?.()
       router.push(`/admin/clients/${saved.id}`)
       router.refresh()
     } catch (caught) {
@@ -110,7 +114,7 @@ export default function ClientForm({ initialBusiness, initialLinks = [], duplica
     }
   }
 
-  return <main className="px-5 py-8 lg:px-10 lg:py-10">
+  return <EditorSaveProvider register={registerFeatureSave}><main className="px-5 py-8 lg:px-10 lg:py-10">
     <div className="mx-auto max-w-6xl">
       <Link href={initialBusiness ? `/admin/clients/${initialBusiness.id}` : '/admin/clients'} className="inline-flex items-center gap-2 text-sm text-[#77776f]"><ArrowLeft size={16}/> Back to clients</Link>
       <div className="mt-6"><p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#8b6b3d]">{isEditing ? 'Edit client' : 'New client'}</p><h1 className="mt-2 text-3xl font-semibold tracking-tight sm:text-4xl">{isEditing ? `Edit ${business.name}` : 'Create a Quicklink page'}</h1><p className="mt-2 text-[#77776f]">Everything saves to Supabase—no code or redeployment required.</p></div>
@@ -131,13 +135,14 @@ export default function ClientForm({ initialBusiness, initialLinks = [], duplica
               <div className="flex items-center justify-end gap-1"><button type="button" onClick={() => moveLink(index, -1)} disabled={index === 0} className="icon-button" aria-label={`Move ${link.label} up`}><ArrowUp size={15}/></button><button type="button" onClick={() => moveLink(index, 1)} disabled={index === links.length - 1} className="icon-button" aria-label={`Move ${link.label} down`}><ArrowDown size={15}/></button>{link.type === 'custom' && <button type="button" onClick={() => setLinks((current) => current.filter((_, itemIndex) => itemIndex !== index))} className="icon-button text-red-600" aria-label={`Delete ${link.label}`}><Trash2 size={15}/></button>}</div>
             </div>)}</div>
           </FormSection>
+          {businessFeatures}
           {error && <p role="alert" className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p>}
           <button disabled={saving} className="flex min-h-12 items-center justify-center gap-2 rounded-xl bg-[#1d1d1b] px-6 text-sm font-semibold text-white disabled:opacity-60">{saving ? <Loader2 size={17} className="animate-spin"/> : <Save size={17}/>} {saving ? 'Saving client…' : isEditing ? 'Save changes' : 'Create client'}</button>
         </div>
         <aside className="h-fit xl:sticky xl:top-8"><p className="mb-3 text-xs font-semibold uppercase tracking-[0.16em] text-[#8b6b3d]">Live phone preview</p><div className="relative overflow-hidden rounded-[2.25rem] border-[7px] border-[#111] bg-cover bg-center text-white shadow-xl" style={{ backgroundImage: `linear-gradient(to bottom, rgba(0,0,0,.35), rgba(0,0,0,.82)), url(${JSON.stringify(previewBackground)})` }}><div className="h-5 bg-black/70"/><div className="px-5 pb-7 pt-7 text-center"><div className={`mx-auto flex size-24 items-center justify-center overflow-hidden border-4 text-xl font-semibold shadow-[0_0_25px_rgba(255,255,255,.18)] ${radius}`} style={{ backgroundColor: business.primary_color, borderColor: '#ffffffcc', color: business.button_text_color }}>{logoPreview ? <img src={logoPreview} alt="Logo preview" className="h-full w-full object-cover"/> : business.name.slice(0, 2).toUpperCase() || 'QL'}</div><p className="mt-4 text-[9px] font-semibold uppercase tracking-[.22em]" style={{ color: business.primary_color }}>{themePresets[business.theme].label}</p><h2 className="mt-1 text-2xl font-semibold">{business.name || 'Your business'}</h2><p className="mt-1 text-xs text-white/70">{business.tagline || 'Your tagline goes here.'}</p><div className="mt-6 grid gap-2">{(previewLinks.length ? previewLinks : [{ label: 'Your first link', icon: 'link' }, { label: 'Another action', icon: 'instagram' }]).map((link, index) => <div key={`${link.label}-${index}`} className={`flex items-center gap-3 border border-white/20 bg-black/50 px-3 py-2.5 text-left text-xs font-semibold text-white backdrop-blur ${radius}`}><LinkIcon name={'icon' in link ? link.icon : 'link'} size={20}/>{link.label}</div>)}</div><p className="mt-6 text-center text-[9px] text-white/55">powered by Quicklink</p></div></div></aside>
       </form>
     </div>
-  </main>
+  </main></EditorSaveProvider>
 }
 
 function FormSection({ title, action, children }: { title: string; action?: React.ReactNode; children: React.ReactNode }) { return <section className="rounded-2xl border border-[#deded7] bg-white p-5 sm:p-6"><div className="mb-5 flex items-center justify-between gap-3"><h2 className="font-semibold">{title}</h2>{action}</div>{children}</section> }

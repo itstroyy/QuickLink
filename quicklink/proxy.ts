@@ -19,6 +19,12 @@ export async function proxy(request: NextRequest) {
   if (!user) {
     return NextResponse.redirect(new URL('/admin/login', request.url))
   }
+  const { data: isAdmin, error: adminError } = await supabase.rpc('is_quicklink_admin')
+  // Before the Phase 1 migration exists, preserve the original authenticated
+  // admin behavior. Once installed, the database allowlist is authoritative.
+  if (!adminError && !isAdmin) {
+    return NextResponse.redirect(new URL('/admin/login?error=unauthorized', request.url))
+  }
   return response
 }
 

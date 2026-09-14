@@ -2,9 +2,11 @@
 
 # dependencies
 /node_modules
+/quicklink/node_modules/
 
 # next.js
 /.next/
+/quicklink/.next/
 /out/
 
 # production
@@ -18,10 +20,17 @@ yarn-error.log*
 
 # env files
 .env*
+!.env.example
 
 # vercel
 .vercel
+/quicklink/.vercel/
+
+# local Supabase CLI state (may contain connection metadata)
+/quicklink/supabase/.temp/
 
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+.vercel
+.env*.local

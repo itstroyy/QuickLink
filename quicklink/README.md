@@ -22,10 +22,13 @@ The publishable key is safe for the browser when Row Level Security is enabled. 
 ### 2. Create the database
 
 1. In Supabase, open **SQL Editor → New query**.
-2. Copy all of `supabase/migrations/202609040001_quicklink_core.sql` into the editor.
-3. Click **Run** once.
+2. Copy all of `supabase/migrations/202609040001_quicklink_core.sql` into the editor and run it.
+3. Copy all of `supabase/migrations/202609130001_customer_hub_phase1.sql` into a new query and run it.
+4. Copy all of `supabase/migrations/202609130002_orders_delivery_quotes.sql` into a new query and run it.
+5. Copy all of `supabase/migrations/202609130003_request_service.sql` into a new query and run it.
+6. Copy all of `supabase/migrations/202609130004_booking.sql` into a new query and run it.
 
-The migration creates businesses, unlimited links, analytics events, settings, the image-storage bucket, indexes, Row Level Security policies, and four removable demo businesses.
+The first migration creates the core platform. The Phase 1 migration adds per-business feature controls, services, offers, hours, announcements, galleries, lead forms/submissions, richer analytics, indexes and Row Level Security. It preserves every existing business, URL and link.
 
 ### 3. Create the administrator
 
@@ -54,6 +57,44 @@ Use international phone format. The homepage shows Call and Text buttons when a 
 4. Create the client.
 5. Open the client detail screen to copy the public URL or download PNG/SVG QR codes.
 6. Edit the client later; the same public URL and QR code immediately use the updated information.
+
+### Customer hub (Phase 1)
+
+Open a client and choose **Customer hub**. From there the administrator can:
+
+- apply an industry suggestion without publishing unwanted features;
+- enable only the modules the business needs and choose one primary module;
+- manage services, prices, durations, offers, hours and announcements;
+- upload gallery images through the existing `business-assets` bucket;
+- publish a lead form and manage incoming leads as New, Contacted or Closed;
+- review analytics for today, 7 days, 30 days or all time.
+
+No client login or client-facing dashboard is created. The Phase 1 migration copies the currently existing Supabase users into `quicklink_admins`, then Row Level Security rejects every future authenticated user who is not explicitly on that allowlist. Keep public Supabase email signup disabled as a second layer of protection.
+
+The original Phase 1 block requires no additional environment variables. Booking, calendar sync, reorder, text lists, loyalty/referrals and AI features remain intentionally reserved for later migrations.
+
+### Orders and service requests
+
+The current editor adds Order Now plus one configurable Request Service module. Request Service can be renamed for delivery, quotes, catering, detailing, cleaning, or another request type. Products, SMS settings, orders and service requests are managed directly inside the existing client editor. The third migration safely moves legacy delivery and quote submissions into the unified request inbox.
+
+Customer submissions do not require an account. Database functions validate enabled modules, calculate product totals from database prices, and save records before notification is attempted.
+
+For owner SMS notifications, configure these server-only variables locally and in Vercel:
+
+```env
+SUPABASE_SECRET_KEY=your-supabase-secret-key
+TWILIO_ACCOUNT_SID=ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+TWILIO_AUTH_TOKEN=your-twilio-auth-token
+TWILIO_PHONE_NUMBER=+15551234567
+```
+
+Never prefix these variables with `NEXT_PUBLIC_`. Without Twilio, submissions still save and the API reports that the SMS was skipped — the specific reason (missing credentials, unverified trial number, invalid phone format, etc.) is always written to the server console.
+
+### Booking
+
+Booking is a fourth configurable module, alongside Order Now and Request Service. Enable it from the client editor's Business Features panel, set a custom button title, buffer time and minimum notice, and choose the notification phone/SMS toggle in SMS Notifications. Services and weekly hours (including closed days) are managed from **Services & hours**, linked from the client detail page and from the Booking settings panel — the same services and hours also power the public booking flow's available times.
+
+The public flow is Service → Date → Available time → Name → Phone → optional email/notes → Confirm. Double-booking is prevented at the database level. Booking works fully without Google Calendar; after confirming, customers get "Add to calendar" links for Google Calendar, Outlook and a downloadable .ics file for Apple/other calendars. The `appointments` table reserves an `external_calendar_event_id` column so two-way calendar sync can be added later without a schema change.
 
 Client pages can be enabled, disabled, duplicated, or archived from the dashboard. Archive is a recoverable soft delete in the database.
 

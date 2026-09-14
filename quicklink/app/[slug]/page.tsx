@@ -1,7 +1,7 @@
 import { notFound } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import ClientPage from '@/components/client-page'
-import type { Business, BusinessLink } from '@/lib/types'
+import type { Business, BusinessLink, PublicHubData } from '@/lib/types'
 
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params
@@ -19,6 +19,23 @@ export default async function BusinessPage({ params }: { params: Promise<{ slug:
     if (unavailable) return <main className="grid min-h-screen place-items-center bg-[#f5f4ef] px-6 text-center text-[#1d1d1b]"><div><p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#8b6b3d]">Quicklink</p><h1 className="mt-4 text-3xl font-semibold">This page is currently unavailable.</h1><p className="mt-3 text-sm text-[#77776f]">Please check back later or contact the business directly.</p></div></main>
     notFound()
   }
-  const { data: links } = await supabase.from('business_links').select('*').eq('business_id', business.id).eq('enabled', true).order('display_order')
-  return <ClientPage business={business as Business} links={(links || []) as BusinessLink[]} />
+  const [linksResult, featuresResult, servicesResult, promotionsResult, hoursResult, announcementsResult, galleryResult, formsResult, productsResult] = await Promise.all([
+    supabase.from('business_links').select('*').eq('business_id', business.id).eq('enabled', true).order('display_order'),
+    supabase.from('business_features').select('*').eq('business_id', business.id).eq('enabled', true).order('display_order'),
+    supabase.from('services').select('*').eq('business_id', business.id).eq('enabled', true).order('display_order'),
+    supabase.from('promotions').select('*').eq('business_id', business.id).eq('enabled', true).order('display_order'),
+    supabase.from('business_hours').select('*').eq('business_id', business.id).order('day_of_week'),
+    supabase.from('announcements').select('*').eq('business_id', business.id).eq('enabled', true).order('display_order'),
+    supabase.from('gallery_items').select('*').eq('business_id', business.id).eq('enabled', true).order('display_order'),
+    supabase.from('lead_forms').select('*').eq('business_id', business.id).eq('enabled', true).order('display_order'),
+    supabase.from('products').select('*').eq('business_id', business.id).eq('available', true).order('display_order'),
+  ])
+  const hubData: PublicHubData = {
+    features: (featuresResult.data || []) as PublicHubData['features'], services: (servicesResult.data || []) as PublicHubData['services'],
+    promotions: (promotionsResult.data || []) as PublicHubData['promotions'], hours: (hoursResult.data || []) as PublicHubData['hours'],
+    announcements: (announcementsResult.data || []) as PublicHubData['announcements'], gallery: (galleryResult.data || []) as PublicHubData['gallery'],
+    leadForms: (formsResult.data || []) as PublicHubData['leadForms'],
+    products: (productsResult.data || []) as PublicHubData['products'],
+  }
+  return <ClientPage business={business as Business} links={(linksResult.data || []) as BusinessLink[]} hubData={hubData}/>
 }
