@@ -206,6 +206,15 @@
 .client-date-field { display: grid; gap: 6px; }
 .client-date-field > span { color: var(--muted-text); font-size: 9px; font-weight: 750; letter-spacing: .1em; text-transform: uppercase; }
 .client-date-field > small { color: var(--accent); font-size: 10px; font-weight: 700; }
+/* Native date input: the typed/selected value already follows the theme via
+   `color` on .client-commerce-field, but the browser's own calendar-icon
+   glyph ignores that and stays dark — invisible on a dark theme's dark
+   input background. A small light chip behind it keeps the icon visible on
+   every theme (light or dark button colors, including custom owner picks)
+   without touching the native picker itself. */
+.client-date-field input[type="date"] { color-scheme: light; }
+.client-date-field input[type="date"]::-webkit-calendar-picker-indicator { padding: 3px; margin-left: 4px; border-radius: 7px; background-color: #fff; cursor: pointer; }
+.client-date-field input[type="date"]::-webkit-datetime-edit { padding: 0; }
 .client-gallery { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 8px; }
 .client-gallery figure { position: relative; overflow: hidden; border-radius: 15px; }
 .client-gallery img { aspect-ratio: 1; width: 100%; object-fit: cover; transition: transform .35s; }
@@ -222,10 +231,21 @@
 .client-form-success { border-radius: 13px; padding: 14px; background: color-mix(in srgb, var(--accent) 16%, transparent); font-size: 12px; font-weight: 650; text-align: center; }
 .client-step { color: var(--muted-text); font: 700 9px ui-monospace, monospace; }
 .client-products { display: grid; gap: 8px; }
-.client-product { display: grid; grid-template-columns: auto minmax(0,1fr) auto; align-items: center; gap: 10px; border-bottom: 1px solid color-mix(in srgb,var(--main-text) 9%,transparent); padding: 8px 0; }
+.client-product { display: grid; grid-template-columns: auto minmax(0,1fr) auto; align-items: center; gap: 10px; border-bottom: 1px solid color-mix(in srgb,var(--main-text) 9%,transparent); padding: 8px 0; width: 100%; text-align: left; color: var(--main-text); background: transparent; }
 .client-product img { width: 48px; height: 48px; border-radius: 12px; object-fit: cover; }
 .client-product strong, .client-product small, .client-product b { display: block; }
 .client-product strong { font-size: 12px; }.client-product small { margin-top: 2px; color: var(--muted-text); font-size: 9px; }.client-product b { margin-top: 4px; color: var(--accent); font-size: 11px; }
+/* Showcase cards (browse/entry-point) can go two-up once there's room; the
+   Order Now cart list (client-order-cart) stays single-column so its
+   quantity steppers keep a comfortable tap target. */
+@media (min-width: 420px) {
+  .client-showcase-grid { grid-template-columns: repeat(2, minmax(0,1fr)); gap: 8px 14px; }
+  .client-showcase-grid .client-product { grid-template-columns: auto minmax(0,1fr); grid-template-rows: auto auto; border-bottom: 0; border-radius: 12px; border: 1px solid color-mix(in srgb, var(--main-text) 10%, transparent); padding: 9px; background: color-mix(in srgb, var(--button-bg) 84%, transparent); }
+  .client-showcase-grid .client-product b { grid-column: 2; }
+}
+button.client-product.client-service-bookable { cursor: pointer; }
+button.client-product.client-service-bookable:active { transform: translateY(0) scale(.992); }
+button.client-product.client-service-bookable:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 .client-quantity { display: flex; align-items: center; gap: 7px; font-size: 11px; font-weight: 700; }
 .client-quantity button { display: grid; width: 26px; height: 26px; place-items: center; border: 1px solid color-mix(in srgb,var(--main-text) 15%,transparent); border-radius: 8px; }
 .client-commerce-next { display: flex; min-height: 46px; width: 100%; align-items: center; justify-content: center; gap: 8px; margin-top: 12px; border-radius: 13px; background: var(--accent); color: var(--button-text); font-size: 12px; font-weight: 750; }
@@ -242,6 +262,28 @@
 .client-add-to-calendar { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin-top: 8px; }.client-add-to-calendar a { display: inline-flex; align-items: center; gap: 5px; border: 1px solid color-mix(in srgb,var(--main-text) 14%,transparent); border-radius: 10px; padding: 8px 12px; color: var(--main-text); font-size: 10px; font-weight: 700; }.client-add-to-calendar a:hover { border-color: var(--accent); }
 .client-shell footer { color: var(--muted-text); }
 .client-shell footer span:last-child { color: var(--main-text); }
+
+/* Public page: hero status pill, dominant CTA, reviews, contact, compact links */
+.client-open-pill { display: inline-flex; align-items: center; gap: 5px; border-radius: 999px; padding: 3px 9px 3px 7px; font-size: 9px; font-weight: 750; letter-spacing: .08em; text-transform: none; background: color-mix(in srgb, var(--card-bg) 70%, transparent); border: 1px solid color-mix(in srgb, var(--main-text) 16%, transparent); color: var(--main-text); }
+.client-open-dot { width: 6px; height: 6px; border-radius: 999px; background: #8a8f98; }
+.client-open-pill.is-open .client-open-dot { background: #2fbf6e; box-shadow: 0 0 8px #2fbf6e; }
+.client-open-pill.is-closed .client-open-dot { background: #d9704f; }
+.client-hours .client-open-pill { margin-left: auto; }
+.client-hero-cta { display: flex; min-height: 54px; width: 100%; align-items: center; justify-content: center; gap: 9px; border: none; background: var(--accent); color: var(--button-text); font-size: 14px; font-weight: 750; box-shadow: 0 14px 32px color-mix(in srgb, var(--accent) 35%, transparent); transition: transform .2s ease, box-shadow .2s ease; }
+.client-hero-cta:hover { transform: translateY(-2px); box-shadow: 0 18px 40px color-mix(in srgb, var(--accent) 45%, transparent); }
+.client-hero-cta:active { transform: translateY(0); }
+.client-quick-actions-row { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
+.client-quick-action-pill { display: inline-flex; align-items: center; gap: 6px; border-radius: 999px; border: 1px solid color-mix(in srgb, var(--main-text) 18%, transparent); background: color-mix(in srgb, var(--card-bg) 62%, transparent); padding: 8px 14px; color: var(--main-text); font-size: 11px; font-weight: 650; backdrop-filter: blur(10px); transition: transform .2s, border-color .2s; }
+.client-quick-action-pill:hover { transform: translateY(-2px); border-color: var(--accent); }
+.client-module-reviews { text-align: left; }
+.client-review-cta { display: flex; align-items: center; gap: 12px; border: 1px solid color-mix(in srgb, var(--main-text) 14%, transparent); border-radius: 15px; padding: 13px 14px; background: color-mix(in srgb, var(--button-bg) 84%, transparent); color: var(--main-text); transition: transform .2s, border-color .2s; }
+.client-review-cta:hover { transform: translateY(-2px); border-color: var(--accent); }
+.client-review-cta strong, .client-review-cta small { display: block; }
+.client-review-cta small { margin-top: 2px; color: var(--muted-text); font-size: 10px; }
+.client-module-links .client-module-heading { margin-bottom: 10px; }
+.client-link-compact { display: flex; min-height: 44px; align-items: center; gap: 10px; border-radius: 12px; border: 1px solid color-mix(in srgb, var(--main-text) 12%, transparent); background: color-mix(in srgb, var(--button-bg) 70%, transparent); padding: 8px 12px; color: var(--button-text); font-size: 12px; font-weight: 650; transition: transform .2s, border-color .2s; }
+.client-link-compact:hover { transform: translateY(-1px); border-color: var(--accent); }
+.client-link-compact .client-link-arrow { margin-left: auto; opacity: .45; }
 
 .client-shell[data-theme='minimal']::before { background: radial-gradient(circle at 12% 15%, color-mix(in srgb, var(--accent) 22%, transparent), transparent 25%), linear-gradient(115deg, transparent 0 62%, color-mix(in srgb, var(--accent) 9%, transparent) 62% 62.5%, transparent 62.5%); }
 .client-shell[data-theme='minimal'][data-has-cover='true']::after { background: linear-gradient(to bottom, rgba(50,32,16,.34), rgba(35,22,12,.68) 48%, rgba(20,13,8,.9)), radial-gradient(circle at 50% 20%, transparent, rgba(20,12,6,.38) 78%); }

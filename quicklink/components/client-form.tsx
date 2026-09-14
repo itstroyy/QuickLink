@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useMemo, useRef, useState } from 'react'
+import { useFeedback } from '@/components/feedback-provider'
 import { useRouter } from 'next/navigation'
 import { ArrowDown, ArrowLeft, ArrowUp, ImagePlus, Loader2, Plus, Save, Trash2 } from 'lucide-react'
 import Link from 'next/link'
@@ -21,6 +22,8 @@ const blankBusiness = {
 
 export default function ClientForm({ initialBusiness, initialLinks = [], duplicateBusiness, businessFeatures }: { initialBusiness?: Business; initialLinks?: BusinessLink[]; duplicateBusiness?: Business; businessFeatures?: React.ReactNode }) {
   const router = useRouter()
+  const notify = useFeedback()
+  const [saveStage, setSaveStage] = useState('Saving business…')
   const [business, setBusiness] = useState({ ...blankBusiness, ...(duplicateBusiness ?? {}), ...(initialBusiness ?? {}) })
   const [links, setLinks] = useState<DraftLink[]>(() => {
     const contentLinks = initialLinks.filter((link) => !['phone', 'sms', 'email'].includes(link.type))
@@ -55,6 +58,7 @@ export default function ClientForm({ initialBusiness, initialLinks = [], duplica
 
   async function upload(file: File | null, businessId: string, kind: 'logo' | 'cover') {
     if (!file) return null
+    setSaveStage(kind === 'logo' ? 'Uploading logo…' : 'Uploading cover image…')
     if (file.size > 5 * 1024 * 1024) throw new Error(`${kind === 'logo' ? 'Logo' : 'Cover image'} must be smaller than 5 MB.`)
     const extension = file.name.split('.').pop()?.toLowerCase() || 'jpg'
     const path = `${businessId}/${kind}-${crypto.randomUUID()}.${extension}`
@@ -66,6 +70,8 @@ export default function ClientForm({ initialBusiness, initialLinks = [], duplica
 
   async function submit(event: React.FormEvent) {
     event.preventDefault()
+    if (saving) return
+    setSaveStage('Saving business…')
     setError('')
     if (!business.slug || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(business.slug)) { setError('Use only lowercase letters, numbers, and hyphens in the slug.'); return }
     setSaving(true)
@@ -90,6 +96,7 @@ export default function ClientForm({ initialBusiness, initialLinks = [], duplica
         const { error: imageError } = await supabase.from('businesses').update({ ...(logoUrl && { logo_url: logoUrl }), ...(coverUrl && { cover_url: coverUrl }) }).eq('id', saved.id)
         if (imageError) throw imageError
       }
+      setSaveStage('Saving links and settings…')
       const contactLinks: DraftLink[] = [
         ...(business.phone ? [{ type: 'phone', label: 'Call us', url: normalizeContactLink('phone', business.phone), icon: 'phone', enabled: true }] : []),
         ...(business.sms ? [{ type: 'sms', label: 'Text us', url: normalizeContactLink('sms', business.sms), icon: 'sms', enabled: true }] : []),
@@ -105,6 +112,7 @@ export default function ClientForm({ initialBusiness, initialLinks = [], duplica
         if (linkError) throw linkError
       }
       await featureSaveRef.current?.()
+      notify(isEditing ? 'Business changes saved.' : 'Business created.')
       router.push(`/admin/clients/${saved.id}`)
       router.refresh()
     } catch (caught) {
@@ -137,9 +145,9 @@ export default function ClientForm({ initialBusiness, initialLinks = [], duplica
           </FormSection>
           {businessFeatures}
           {error && <p role="alert" className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p>}
-          <button disabled={saving} className="flex min-h-12 items-center justify-center gap-2 rounded-xl bg-[#1d1d1b] px-6 text-sm font-semibold text-white disabled:opacity-60">{saving ? <Loader2 size={17} className="animate-spin"/> : <Save size={17}/>} {saving ? 'Saving client…' : isEditing ? 'Save changes' : 'Create client'}</button>
+          <button aria-busy={saving} disabled={saving} className="flex min-h-12 items-center justify-center gap-2 rounded-xl bg-[#1d1d1b] px-6 text-sm font-semibold text-white disabled:opacity-60">{saving ? <Loader2 size={17} className="animate-spin"/> : <Save size={17}/>} {saving ? saveStage : isEditing ? 'Save changes' : 'Create client'}</button>
         </div>
-        <aside className="h-fit xl:sticky xl:top-8"><p className="mb-3 text-xs font-semibold uppercase tracking-[0.16em] text-[#8b6b3d]">Live phone preview</p><div className="relative overflow-hidden rounded-[2.25rem] border-[7px] border-[#111] bg-cover bg-center text-white shadow-xl" style={{ backgroundImage: `linear-gradient(to bottom, rgba(0,0,0,.35), rgba(0,0,0,.82)), url(${JSON.stringify(previewBackground)})` }}><div className="h-5 bg-black/70"/><div className="px-5 pb-7 pt-7 text-center"><div className={`mx-auto flex size-24 items-center justify-center overflow-hidden border-4 text-xl font-semibold shadow-[0_0_25px_rgba(255,255,255,.18)] ${radius}`} style={{ backgroundColor: business.primary_color, borderColor: '#ffffffcc', color: business.button_text_color }}>{logoPreview ? <img src={logoPreview} alt="Logo preview" className="h-full w-full object-cover"/> : business.name.slice(0, 2).toUpperCase() || 'QL'}</div><p className="mt-4 text-[9px] font-semibold uppercase tracking-[.22em]" style={{ color: business.primary_color }}>{themePresets[business.theme].label}</p><h2 className="mt-1 text-2xl font-semibold">{business.name || 'Your business'}</h2><p className="mt-1 text-xs text-white/70">{business.tagline || 'Your tagline goes here.'}</p><div className="mt-6 grid gap-2">{(previewLinks.length ? previewLinks : [{ label: 'Your first link', icon: 'link' }, { label: 'Another action', icon: 'instagram' }]).map((link, index) => <div key={`${link.label}-${index}`} className={`flex items-center gap-3 border border-white/20 bg-black/50 px-3 py-2.5 text-left text-xs font-semibold text-white backdrop-blur ${radius}`}><LinkIcon name={'icon' in link ? link.icon : 'link'} size={20}/>{link.label}</div>)}</div><p className="mt-6 text-center text-[9px] text-white/55">powered by Quicklink</p></div></div></aside>
+        <aside className="ql-live-preview h-fit xl:sticky xl:top-8"><p className="mb-3 text-xs font-semibold uppercase tracking-[0.16em] text-[#8b6b3d]">Live phone preview</p><div className="relative overflow-hidden rounded-[2.25rem] border-[7px] border-[#111] bg-cover bg-center text-white shadow-xl" style={{ backgroundImage: `linear-gradient(to bottom, rgba(0,0,0,.35), rgba(0,0,0,.82)), url(${JSON.stringify(previewBackground)})` }}><div className="h-5 bg-black/70"/><div className="px-5 pb-7 pt-7 text-center"><div className={`mx-auto flex size-24 items-center justify-center overflow-hidden border-4 text-xl font-semibold shadow-[0_0_25px_rgba(255,255,255,.18)] ${radius}`} style={{ backgroundColor: business.primary_color, borderColor: '#ffffffcc', color: business.button_text_color }}>{logoPreview ? <img src={logoPreview} alt="Logo preview" className="h-full w-full object-cover"/> : business.name.slice(0, 2).toUpperCase() || 'QL'}</div><p className="mt-4 text-[9px] font-semibold uppercase tracking-[.22em]" style={{ color: business.primary_color }}>{themePresets[business.theme].label}</p><h2 className="mt-1 text-2xl font-semibold">{business.name || 'Your business'}</h2><p className="mt-1 text-xs text-white/70">{business.tagline || 'Your tagline goes here.'}</p><div className="mt-6 grid gap-2">{(previewLinks.length ? previewLinks : [{ label: 'Your first link', icon: 'link' }, { label: 'Another action', icon: 'instagram' }]).map((link, index) => <div key={`${link.label}-${index}`} className={`flex items-center gap-3 border border-white/20 bg-black/50 px-3 py-2.5 text-left text-xs font-semibold text-white backdrop-blur ${radius}`}><LinkIcon name={'icon' in link ? link.icon : 'link'} size={20}/>{link.label}</div>)}</div><p className="mt-6 text-center text-[9px] text-white/55">powered by Quicklink</p></div></div></aside>
       </form>
     </div>
   </main></EditorSaveProvider>

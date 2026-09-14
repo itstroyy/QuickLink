@@ -1,24 +1,24 @@
 import { NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
-import { requireAdminSession } from '@/lib/admin-guard'
+import { businessSession } from '@/lib/dashboard/auth'
 import { createAdminClient } from '@/lib/supabase/admin'
 
-// Google redirects here after the admin approves access. This route only
-// exchanges the code for tokens and stores them (service-role only, never
-// sent to the browser) — it never touches booking data.
+// Google redirects here after the signed-in owner/admin approves access.
+// This route only exchanges the code for tokens and stores them
+// (service-role only, never sent to the browser) — it never touches
+// booking data. The state cookie was set for a specific businessId by
+// /connect, and we re-check that the current session can still manage that
+// exact business before storing anything.
 export async function GET(request: Request) {
-  const session = await requireAdminSession()
-  if (!session.ok) return NextResponse.json({ error: 'Not signed in.' }, { status: session.status })
-
   const url = new URL(request.url)
   const code = url.searchParams.get('code')
   const state = url.searchParams.get('state')
   const cookieStore = await cookies()
   const savedState = cookieStore.get('quicklink_google_oauth')?.value
-  let oauth: { state?: string; businessId?: string } = {}
+  let oauth: { state?: string; businessId?: string; returnTo?: string } = {}
   try { oauth = savedState ? JSON.parse(savedState) : {} } catch {}
   const businessId = state && state === oauth.state ? oauth.businessId : undefined
-  const homeUrl = new URL(businessId ? `/admin/clients/${businessId}/edit` : '/admin/clients', url.origin)
+  const homeUrl = new URL(businessId && oauth.returnTo ? oauth.returnTo : '/admin/clients', url.origin)
 
   function redirect(status: 'connected' | 'error') {
     homeUrl.searchParams.set('calendar', status)
@@ -28,6 +28,8 @@ export async function GET(request: Request) {
   }
 
   if (!code || !businessId) return redirect('error')
+  const session = await businessSession(businessId)
+  if (!session.ok) return redirect('error')
 
   const clientId = process.env.GOOGLE_CLIENT_ID?.trim()
   const clientSecret = process.env.GOOGLE_CLIENT_SECRET?.trim()

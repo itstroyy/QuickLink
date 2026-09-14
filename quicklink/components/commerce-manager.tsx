@@ -1,5 +1,6 @@
 'use client'
 
+import { useFeedback } from '@/components/feedback-provider'
 import { useEffect, useState } from 'react'
 import { CalendarCheck2, ImagePlus, Loader2, Plus, Save, Trash2 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
@@ -26,11 +27,21 @@ export default function CommerceManager({businessId,ready,showProducts=true,init
   const [message,setMessage]=useState('')
   const [calendarConnected,setCalendarConnected]=useState<boolean|null>(null)
   const supabase=createClient()
+  const notify=useFeedback()
+  const [calendarError,setCalendarError]=useState(false)
+  const [checkingCalendar,setCheckingCalendar]=useState(false)
+  const [connecting,setConnecting]=useState(false)
 
-  useEffect(()=>{
-    fetch(`/api/admin/calendar/status?businessId=${businessId}`).then((r)=>r.json()).then((result)=>setCalendarConnected(Boolean(result.connected))).catch(()=>setCalendarConnected(false))
-  },[businessId])
-
+  async function checkCalendar() {
+    setCheckingCalendar(true); setCalendarError(false)
+    try {
+      const response = await fetch(`/api/admin/calendar/status?businessId=${businessId}`)
+      if (!response.ok) throw new Error('Connection check failed')
+      const result = await response.json(); setCalendarConnected(Boolean(result.connected))
+    } catch { setCalendarError(true) }
+    finally { setCheckingCalendar(false) }
+  }
+  useEffect(() => { void checkCalendar() }, [businessId])
   if(!ready)return <section className="rounded-2xl border border-amber-200 bg-amber-50 p-6"><h2 className="font-semibold text-amber-900">Feature database setup required</h2><p className="mt-2 text-sm text-amber-800">Run <code className="rounded bg-amber-100 px-1">202609130003_request_service.sql</code>, then refresh.</p></section>
 
   function addProduct(){
@@ -39,20 +50,60 @@ export default function CommerceManager({businessId,ready,showProducts=true,init
     setPriceInputs((current)=>({...current,[id]:'0.00'}))
   }
   function updateProduct(id:string,changes:Partial<Product>){setProducts((rows)=>rows.map((row)=>row.id===id?{...row,...changes}:row))}
-  async function saveProduct(row:Product){
-    const raw=(priceInputs[row.id]??'0').trim()
-    if(!/^\d+(\.\d{0,2})?$/.test(raw)){setMessage('Enter a valid price with no more than two decimal places.');return}
-    const price_cents=Math.round(Number(raw)*100)
-    setBusy(row.id);setMessage('')
-    const{data,error}=await supabase.from('products').upsert({...row,price_cents}).select().single()
-    if(error)setMessage(error.message)
-    else{setProducts(products.map((item)=>item.id===row.id?data as Product:item));setPriceInputs((current)=>({...current,[row.id]:(price_cents/100).toFixed(2)}));setMessage('Product saved.')}
-    setBusy('')
+  async function saveProduct(row: Product) {
+    if (busy) return
+    const raw = (priceInputs[row.id] ?? '0').trim()
+    if (!/^\d+(\.\d{0,2})?$/.test(raw)) { setMessage('Enter a valid price with no more than two decimal places.'); return }
+    const price_cents = Math.round(Number(raw) * 100)
+    setBusy(row.id); setMessage('')
+    try {
+      const { data, error } = await supabase.from('products').upsert({ ...row, price_cents }).select().single()
+      if (error) throw error
+      setProducts((rows) => rows.map((item) => item.id === row.id ? data as Product : item))
+      setPriceInputs((current) => ({ ...current, [row.id]: (price_cents / 100).toFixed(2) }))
+      setMessage('Product saved.'); notify('Product saved.')
+    } catch { setMessage('Could not save this product. Please try again.') }
+    finally { setBusy('') }
   }
-  async function removeProduct(id:string){if(!confirm('Remove this product?'))return;const{error}=await supabase.from('products').delete().eq('id',id);if(error)setMessage(error.message);else{setProducts(products.filter((item)=>item.id!==id));setPriceInputs((current)=>{const next={...current};delete next[id];return next})}}
-  async function upload(row:Product,file:File){if(file.size>5*1024*1024){setMessage('Image must be under 5 MB.');return}setBusy(`image-${row.id}`);const ext=file.name.split('.').pop()||'jpg';const path=`${businessId}/product-${crypto.randomUUID()}.${ext}`;const{error}=await supabase.storage.from('business-assets').upload(path,file);if(error)setMessage(error.message);else{const image_url=supabase.storage.from('business-assets').getPublicUrl(path).data.publicUrl;const next={...row,image_url};setProducts(products.map((item)=>item.id===row.id?next:item));await supabase.from('products').upsert(next)}setBusy('')}
-  async function disconnectCalendar(){if(!confirm('Disconnect Google Calendar from this business?'))return;setBusy('calendar');const response=await fetch('/api/admin/calendar/disconnect',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({businessId})});const result=await response.json();setBusy('');if(!response.ok)setMessage(result.error||'Unable to disconnect.');else{setCalendarConnected(false);setMessage('Google Calendar disconnected.')}}
-
+  async function removeProduct(id: string) {
+    if (busy || !confirm('Remove this product?')) return
+    setBusy(id); setMessage('')
+    try {
+      const { error } = await supabase.from('products').delete().eq('id', id)
+      if (error) throw error
+      setProducts((rows) => rows.filter((item) => item.id !== id))
+      setPriceInputs((current) => { const next = { ...current }; delete next[id]; return next })
+      notify('Product removed.')
+    } catch { setMessage('Could not remove this product. Please try again.') }
+    finally { setBusy('') }
+  }  async function upload(row: Product, file: File) {
+    if (busy) return
+    if (file.size > 5 * 1024 * 1024 || !['image/png', 'image/jpeg', 'image/webp'].includes(file.type)) { setMessage('Choose a PNG, JPEG or WebP image under 5 MB.'); return }
+    setBusy(`image-${row.id}`); setMessage('')
+    try {
+      const extension = file.type === 'image/png' ? 'png' : file.type === 'image/webp' ? 'webp' : 'jpg'
+      const path = `${businessId}/product-${crypto.randomUUID()}.${extension}`
+      const { error } = await supabase.storage.from('business-assets').upload(path, file)
+      if (error) throw error
+      const image_url = supabase.storage.from('business-assets').getPublicUrl(path).data.publicUrl
+      const next = { ...row, image_url }
+      const { error: saveError } = await supabase.from('products').upsert(next)
+      if (saveError) throw saveError
+      setProducts((rows) => rows.map((item) => item.id === row.id ? next : item))
+      notify('Product image uploaded and saved.')
+    } catch { setMessage('Could not save this image. Please try again.') }
+    finally { setBusy('') }
+  }
+  async function disconnectCalendar() {
+    if (busy || !confirm('Disconnect Google Calendar from this business?')) return
+    setBusy('calendar'); setMessage('')
+    try {
+      const response = await fetch('/api/admin/calendar/disconnect', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ businessId }) })
+      if (!response.ok) throw new Error('Unable to disconnect')
+      setCalendarConnected(false); notify('Google Calendar disconnected.')
+    } catch { setMessage('Could not disconnect Google Calendar. Please try again.') }
+    finally { setBusy('') }
+  }
   return <div className="grid gap-6">
     {message&&<p role="status" className={`rounded-xl px-4 py-3 text-sm ${message.includes('saved')?'bg-emerald-50 text-emerald-700':'bg-red-50 text-red-700'}`}>{message}</p>}
     {showProducts&&<section id="products" className={section}>
@@ -66,8 +117,8 @@ export default function CommerceManager({businessId,ready,showProducts=true,init
           <Field labelText="Sort order"><input className="form-control" type="number" min="0" value={row.display_order} onChange={(event)=>updateProduct(row.id,{display_order:Number(event.target.value)})}/></Field>
         </div>
         <div className="mt-3 flex flex-wrap items-center justify-between gap-3 border-t border-[#e5e2da] pt-3">
-          <div className="flex items-center gap-4"><label className="flex items-center gap-2 text-xs font-medium"><input type="checkbox" checked={row.available} onChange={(event)=>updateProduct(row.id,{available:event.target.checked})} className="accent-[#1d1d1b]"/> Available</label><label className="flex cursor-pointer items-center gap-2 text-xs font-medium text-[#77776f]"><ImagePlus size={14}/>{busy===`image-${row.id}`?'Uploading…':row.image_url?'Replace image':'Add image'}<input type="file" accept="image/png,image/jpeg,image/webp" className="sr-only" onChange={(event)=>event.target.files?.[0]&&upload(row,event.target.files[0])}/></label></div>
-          <div className="flex gap-2"><button type="button" className={button} onClick={()=>saveProduct(row)}>{busy===row.id?<Loader2 className="animate-spin" size={15}/>:<Save size={15}/>} Save</button><button type="button" className="icon-button text-red-600" onClick={()=>removeProduct(row.id)} aria-label={`Remove ${row.name}`}><Trash2 size={15}/></button></div>
+          <div className="flex items-center gap-4"><label className="flex items-center gap-2 text-xs font-medium"><input type="checkbox" checked={row.available} onChange={(event)=>updateProduct(row.id,{available:event.target.checked})} className="accent-[#1d1d1b]"/> Available</label><label className="flex cursor-pointer items-center gap-2 text-xs font-medium text-[#77776f]"><ImagePlus size={14}/>{busy===`image-${row.id}`?'Uploading…':row.image_url?'Replace image':'Add image'}<input disabled={Boolean(busy)} type="file" accept="image/png,image/jpeg,image/webp" className="sr-only" onChange={(event)=>event.target.files?.[0]&&upload(row,event.target.files[0])}/></label></div>
+          <div className="flex gap-2"><button type="button" disabled={Boolean(busy)} aria-busy={busy===row.id} className={button} onClick={()=>saveProduct(row)}>{busy===row.id?<Loader2 className="animate-spin" size={15}/>:<Save size={15}/>} Save</button><button type="button" disabled={Boolean(busy)} className="icon-button text-red-600" onClick={()=>removeProduct(row.id)} aria-label={`Remove ${row.name}`}><Trash2 size={15}/></button></div>
         </div>
       </article>)}{products.length===0&&<p className="rounded-xl border border-dashed p-7 text-center text-sm text-[#77776f]">No products yet. Select Add Product to create the first one.</p>}</div>
     </section>}
@@ -80,10 +131,10 @@ export default function CommerceManager({businessId,ready,showProducts=true,init
         <div id="calendar" className="grid gap-4 border-t border-[#e5e2da] pt-5"><div><strong className="text-sm">Optional Google Calendar</strong><p className="mt-1 text-xs text-[#77776f]">When connected, new bookings sync as events and busy times block double-booking.</p></div>
         <NotificationToggle label="Sync bookings to Google Calendar (saved with Save changes below)" checked={notifications.calendar_integration_enabled} onChange={(checked)=>onNotificationsChange({...notifications,calendar_integration_enabled:checked})}/>
         <div className="flex flex-wrap items-center gap-3">
-          {calendarConnected===null&&<span className="text-xs text-[#77776f]">Checking connection…</span>}
-          {calendarConnected===true&&<span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700"><CalendarCheck2 size={14}/> Connected</span>}
-          {calendarConnected===false&&<span className="text-xs text-[#77776f]">Not connected</span>}
-          {calendarConnected?<button type="button" className={button} onClick={disconnectCalendar} disabled={busy==='calendar'}>Disconnect</button>:<a href={`/api/admin/calendar/connect?businessId=${businessId}`} className={button}>Connect Google Calendar</a>}
+          {checkingCalendar&&<span className="text-xs text-[#77776f]">Checking connection…</span>}
+          {!checkingCalendar&&!calendarError&&calendarConnected===true&&<span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700"><CalendarCheck2 size={14}/> Connected</span>}
+          {!checkingCalendar&&!calendarError&&calendarConnected===false&&<span className="text-xs text-[#77776f]">Not connected</span>}
+          {calendarError&&<span role="status" className="text-xs text-red-700">Could not check connection. <button type="button" className="underline min-h-11" onClick={checkCalendar}>Retry</button></span>}{!checkingCalendar&&!calendarError&&(calendarConnected?<button type="button" className={button} onClick={disconnectCalendar} disabled={busy==='calendar'}>{busy==='calendar'?'Disconnecting…':'Disconnect'}</button>:<a onClick={() => setConnecting(true)} href={`/api/admin/calendar/connect?businessId=${businessId}`} className={button}>{connecting?'Connecting…':'Connect Google Calendar'}</a>)}
         </div></div>
       </div>
     </section>

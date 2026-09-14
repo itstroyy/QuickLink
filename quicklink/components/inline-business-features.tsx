@@ -1,5 +1,6 @@
 'use client'
 
+import { useFeedback } from '@/components/feedback-provider'
 import { useState } from 'react'
 import Link from 'next/link'
 import { ArrowUpRight, Calendar, Check as CheckIcon, Copy, Loader2, MessageSquareText, RefreshCw, Save, ShoppingBag } from 'lucide-react'
@@ -44,6 +45,7 @@ function bookingSettings(feature?: BusinessFeature): BookingSettings {
 }
 
 export default function InlineBusinessFeatures({ businessId, businessSlug, data, initialClientAccess }: { businessId: string; businessSlug: string; data: InlineCommerceData; initialClientAccess: BusinessClientAccess }) {
+  const notify = useFeedback()
   const [features, setFeatures] = useState(data.features)
   const [requestConfig, setRequestConfig] = useState(() => requestSettings(data.features.find((feature) => feature.feature_key === 'request_service')))
   const [bookingConfig, setBookingConfig] = useState(() => bookingSettings(data.features.find((feature) => feature.feature_key === 'booking')))
@@ -102,6 +104,7 @@ export default function InlineBusinessFeatures({ businessId, businessSlug, data,
     if (notificationsResult.data) setNotifications(notificationsResult.data as NotificationSettings)
     if (accessResult.data) setClientAccess(accessResult.data as BusinessClientAccess)
     setMessage('Changes saved.')
+    notify('Changes saved.')
   }
 
   const hasParentSave = useEditorSave(saveChanges)
@@ -118,7 +121,7 @@ export default function InlineBusinessFeatures({ businessId, businessSlug, data,
   }
 
   function copyLink() {
-    navigator.clipboard.writeText(clientActivityLink).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1800) })
+    navigator.clipboard.writeText(clientActivityLink).then(() => { setCopied(true); notify('Private activity link copied.'); setTimeout(() => setCopied(false), 1800) }).catch(() => notify('Could not copy. Select the link and copy it manually.', 'error'))
   }
 
   function updateFeature(key: typeof modules[number]['key'], changes: Partial<BusinessFeature>) {
@@ -185,9 +188,11 @@ export default function InlineBusinessFeatures({ businessId, businessSlug, data,
     </section>
     <CommerceManager businessId={businessId} ready={data.ready} showProducts={enabled('ordering')} initialProducts={data.products} notifications={notifications} onNotificationsChange={setNotifications}/>
 
-    <section id="client-activity-access" className="rounded-2xl border border-[#deded7] bg-white p-5 sm:p-6">
-      <div className="mb-5"><h2 className="font-semibold">Client Activity access</h2><p className="mt-1 text-sm text-[#77776f]">Give this business a private link to view and manage their own activity — no login, no dashboard, no access to configuration or other businesses. Enable/visibility saved with the main Save changes button below.</p></div>
-      <label className="flex min-h-11 items-center gap-2.5 rounded-xl border border-[#d8d6ce] bg-[#fafaf7] px-3.5 text-sm font-medium"><input type="checkbox" checked={clientAccess.client_activity_enabled} onChange={(event) => setClientAccess({ ...clientAccess, client_activity_enabled: event.target.checked })} className="size-4 accent-[#1d1d1b]"/> Enable private Client Activity access</label>
+    <details id="client-activity-access" className="rounded-2xl border border-[#deded7] bg-white p-5 sm:p-6">
+      <summary className="cursor-pointer font-semibold text-[#77776f]">Legacy access (advanced)</summary>
+      <div className="mb-5 mt-4 rounded-xl border border-[#eee4c8] bg-[#fbf7e9] px-4 py-3 text-xs text-[#7a6a30]">This is the old token-link method for giving a business owner activity access, from before Quicklink had real owner sign-in. New businesses should be invited to <span className="font-medium">/dashboard</span> instead (see Owner access). Keep this only if a client already has one of these private links in use — existing links keep working, and you can revoke or regenerate them here.</div>
+      <h2 className="font-semibold">Client Activity access</h2><p className="mt-1 text-sm text-[#77776f]">Give this business a private link to view and manage their own activity — no login, no dashboard, no access to configuration or other businesses. Enable/visibility saved with the main Save changes button below.</p>
+      <label className="mt-4 flex min-h-11 items-center gap-2.5 rounded-xl border border-[#d8d6ce] bg-[#fafaf7] px-3.5 text-sm font-medium"><input type="checkbox" checked={clientAccess.client_activity_enabled} onChange={(event) => setClientAccess({ ...clientAccess, client_activity_enabled: event.target.checked })} className="size-4 accent-[#1d1d1b]"/> Enable private Client Activity access</label>
       {clientAccess.client_activity_enabled && <>
         <div className="mt-3 grid gap-2 sm:grid-cols-3">
           <label className="flex min-h-10 items-center gap-2 rounded-xl border border-[#dedbd2] bg-white px-3 text-xs font-medium"><input type="checkbox" checked={clientAccess.client_activity_show_orders} onChange={(event) => setClientAccess({ ...clientAccess, client_activity_show_orders: event.target.checked })} className="accent-[#1d1d1b]"/> Orders</label>
@@ -202,7 +207,7 @@ export default function InlineBusinessFeatures({ businessId, businessSlug, data,
         {!clientAccess.activity_access_token && <p className="mt-3 text-xs text-[#77776f]">Select Save changes below to enable this and generate the private link.</p>}
         <p className="mt-2 text-xs text-[#77776f]">Regenerating invalidates the previous link immediately. This business can search, filter, view details, change status, and archive/restore — never permanently delete, edit configuration, or see other businesses.</p>
       </>}
-    </section>
+    </details>
 
     {!hasParentSave && <div className="sticky bottom-4 z-10 flex justify-end">
       <button type="button" onClick={() => void saveChanges().catch(() => {})} disabled={saveBusy} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-[#1d1d1b] px-6 text-sm font-semibold text-white shadow-lg disabled:opacity-50">{saveBusy ? <Loader2 className="animate-spin" size={16}/> : <Save size={16}/>} Save changes</button>

@@ -261,6 +261,18 @@ export type BusinessClientAccess = {
   activity_access_token: string
 }
 
+export type BusinessPreferences = {
+  business_id: string
+  industry: 'general' | 'barber' | 'beauty' | 'detailing' | 'repair' | 'food' | 'cleaning' | 'retail'
+  primary_action: 'auto' | 'ordering' | 'booking' | 'request_service' | 'phone' | 'none'
+  section_order: string[]
+  timezone: string
+  service_area: string | null
+  fulfillment_text: string | null
+  products_section_title: string | null
+  updated_at: string
+}
+
 export type SiteSettings = {
   id: number
   business_name: string

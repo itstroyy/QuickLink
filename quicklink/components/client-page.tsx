@@ -1,12 +1,14 @@
 'use client'
 
+import { useFeedback } from '@/components/feedback-provider'
 import { useEffect, useMemo, useState } from 'react'
-import { ArrowRight, Check, Share2, Sparkles } from 'lucide-react'
+import { ArrowRight, Calendar, Check, Phone, Share2, ShoppingBag, Sparkles, Wrench } from 'lucide-react'
 import { LinkIcon, resolveLinkIcon } from '@/components/link-icon'
 import QuicklinkLogo from '@/components/quicklink-logo'
 import { themeBackgrounds } from '@/lib/themes'
-import type { Business, BusinessLink } from '@/lib/types'
-import type { PublicHubData } from '@/lib/types'
+import type { Business, BusinessLink, BusinessPreferences, PublicHubData } from '@/lib/types'
+import { resolvePrimaryAction } from '@/lib/section-order'
+import type { OpenStatus } from '@/lib/business-hours'
 import ClientModules from '@/components/client-modules'
 
 const themeLabels = {
@@ -17,18 +19,44 @@ const themeLabels = {
   automotive: 'Ready when you are',
 }
 
-const quickActionTypes = ['phone', 'sms', 'tiktok', 'menu', 'website']
+const quickActionTypes = ['phone', 'sms']
 const QUICKLINK_URL = 'https://quicklink.host'
 
-export default function ClientPage({ business, links, hubData }: { business: Business; links: BusinessLink[]; hubData?: PublicHubData }) {
+export default function ClientPage({ business, links, hubData, preferences, openStatus }: {
+  business: Business
+  links: BusinessLink[]
+  hubData?: PublicHubData
+  preferences?: BusinessPreferences
+  openStatus?: OpenStatus | null
+}) {
+  const notify = useFeedback()
   const [copied, setCopied] = useState(false)
   const radius = business.border_radius === 'round' ? 'rounded-[2rem]' : business.border_radius === 'sharp' ? 'rounded-lg' : 'rounded-2xl'
   const internalTypes = ['phone', 'sms', 'email']
-  const quickActions = useMemo(() => links.filter((link) => quickActionTypes.includes(link.type)).slice(0, 4), [links])
-  const quickActionIds = useMemo(() => new Set(quickActions.map((link) => link.id)), [quickActions])
-  const mainLinks = useMemo(() => links.filter((link) => !quickActionIds.has(link.id)), [links, quickActionIds])
+  const quickActions = useMemo(() => links.filter((link) => quickActionTypes.includes(link.type)).slice(0, 2), [links])
   const isBarbershop = business.category?.toLowerCase().includes('barber') || business.name.toLowerCase().includes('cutz')
   const backdropUrl = business.cover_url || (isBarbershop ? '/images/barbershop-background.png' : themeBackgrounds[business.theme])
+
+  const enabled = useMemo(() => new Set((hubData?.features || []).filter((f) => f.enabled).map((f) => f.feature_key)), [hubData])
+  const phoneLink = useMemo(() => links.find((l) => l.type === 'phone'), [links])
+  const primaryAction = useMemo(() => resolvePrimaryAction({
+    preferred: preferences?.primary_action || 'auto',
+    industry: preferences?.industry,
+    hasOrdering: enabled.has('ordering'),
+    hasBooking: enabled.has('booking'),
+    hasRequest: enabled.has('request_service'),
+    hasPhone: Boolean(phoneLink),
+  }), [preferences, enabled, phoneLink])
+
+  const heroCta = useMemo(() => {
+    switch (primaryAction) {
+      case 'ordering': return { label: 'Order now', icon: ShoppingBag, kind: 'scroll' as const, target: 'quicklink-order' }
+      case 'booking': return { label: 'Book an appointment', icon: Calendar, kind: 'scroll' as const, target: 'quicklink-booking' }
+      case 'request_service': return { label: 'Request service', icon: Wrench, kind: 'scroll' as const, target: 'quicklink-request-service' }
+      case 'phone': return phoneLink ? { label: 'Call now', icon: Phone, kind: 'link' as const, href: phoneLink.url } : null
+      default: return null
+    }
+  }, [primaryAction, phoneLink])
 
   useEffect(() => {
     let visitorId = ''
@@ -37,10 +65,16 @@ export default function ClientPage({ business, links, hubData }: { business: Bus
   }, [business.id])
 
   function record(link: BusinessLink) {
-    const eventType = link.type === 'phone' ? 'call_click' : link.type === 'sms' ? 'text_click' : link.type === 'directions' ? 'directions_click' : link.type === 'google_review' ? 'review_click' : ['instagram','facebook','tiktok','youtube'].includes(link.type) ? 'social_click' : 'link_click'
+    const eventType = link.type === 'phone' ? 'call_click' : link.type === 'sms' ? 'text_click' : link.type === 'directions' ? 'directions_click' : link.type === 'google_review' ? 'review_click' : ['instagram', 'facebook', 'tiktok', 'youtube'].includes(link.type) ? 'social_click' : 'link_click'
     let visitorId = ''
     try { visitorId = localStorage.getItem('quicklink_visitor') || crypto.randomUUID(); localStorage.setItem('quicklink_visitor', visitorId) } catch {}
     fetch('/api/analytics', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ businessId: business.id, linkId: link.id, eventType, visitorId, metadata: { link_type: link.type } }), keepalive: true }).catch(() => {})
+  }
+
+  function scrollToCta() {
+    if (!heroCta || heroCta.kind !== 'scroll') return
+    fetch('/api/analytics', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ businessId: business.id, eventType: 'feature_click', metadata: { feature: 'hero_cta', target: heroCta.target } }), keepalive: true }).catch(() => {})
+    document.getElementById(heroCta.target)?.scrollIntoView({ behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth', block: 'start' })
   }
 
   async function sharePage() {
@@ -48,7 +82,9 @@ export default function ClientPage({ business, links, hubData }: { business: Bus
       await navigator.share({ title: business.name, text: business.tagline || undefined, url: window.location.href }).catch(() => {})
       return
     }
-    await navigator.clipboard.writeText(window.location.href)
+    try { await navigator.clipboard.writeText(window.location.href) }
+    catch { notify('Could not copy. Copy the page address from your browser.', 'error'); return }
+    notify('Page link copied.')
     setCopied(true)
     window.setTimeout(() => setCopied(false), 1800)
   }
@@ -78,7 +114,7 @@ export default function ClientPage({ business, links, hubData }: { business: Bus
           <QuicklinkLogo className="text-base" markClassName="border border-white/15 bg-black/45 text-[var(--accent)] backdrop-blur-xl"/>
         </a>
         <div className="flex items-center gap-2">
-          <button type="button" onClick={sharePage} className="client-top-icon" aria-label="Share this page">{copied ? <Check size={17}/> : <Share2 size={17}/>}</button>
+          <button type="button" onClick={sharePage} className="client-top-icon" aria-label={copied ? "Copied" : "Share this page"}>{copied ? <Check size={17}/> : <Share2 size={17}/>}</button>
         </div>
       </header>
 
@@ -92,41 +128,30 @@ export default function ClientPage({ business, links, hubData }: { business: Bus
           </div>
 
           <div className="mt-5">
-            <div className="mb-2 flex items-center justify-center gap-2 text-[10px] font-semibold uppercase tracking-[.28em]" style={{ color: business.primary_color }}><Sparkles size={12}/>{business.category || themeLabels[business.theme]}</div>
+            <div className="mb-2 flex flex-wrap items-center justify-center gap-x-2 gap-y-1 text-[10px] font-semibold uppercase tracking-[.28em]" style={{ color: business.primary_color }}>
+              <Sparkles size={12}/>{business.category || themeLabels[business.theme]}
+              {openStatus && <span className={`client-open-pill ${openStatus.isOpen ? 'is-open' : 'is-closed'}`}><span className="client-open-dot" aria-hidden="true"/>{openStatus.label}</span>}
+            </div>
             <h1 className="client-title text-[2.45rem] font-semibold leading-none tracking-[-.045em] sm:text-[3rem]">{business.name}</h1>
             {business.tagline && <p className="mt-3 text-[15px] font-medium tracking-wide" style={{ color: 'var(--main-text)' }}>{business.tagline}</p>}
             {business.description && <p className="mx-auto mt-2 max-w-md text-[14px] leading-6" style={{ color: 'var(--muted-text)' }}>{business.description}</p>}
+            {preferences?.service_area && <p className="mt-2 text-[11px] font-medium uppercase tracking-[.1em]" style={{ color: 'var(--muted-text)' }}>Serving {preferences.service_area}</p>}
           </div>
 
-          <div className="mt-7 grid gap-3 text-left">
-            {mainLinks.map((link, index) => <a
-              key={link.id}
-              href={link.url}
-              onClick={() => record(link)}
-              target={internalTypes.includes(link.type) ? '_self' : '_blank'}
-              rel="noreferrer"
-              className={`client-link group ${radius} ${/review/i.test(`${link.label} ${link.url}`) ? 'client-link-featured' : ''}`}
-            >
-              <span className="client-link-icon"><LinkIcon name={resolveLinkIcon(link)} size={23}/></span>
-              <span className="min-w-0 flex-1"><span className="block truncate text-[14px] font-semibold sm:text-[15px]">{link.label}</span><span className="mt-0.5 block text-[9px] font-semibold uppercase tracking-[.18em] opacity-45">Tap to open</span></span>
-              <span className="client-link-number">{String(index + 1).padStart(2, '0')}</span>
-              <ArrowRight size={18} className="client-link-arrow"/>
-            </a>)}
-          </div>
+          {heroCta && <div className="mt-6">
+            {heroCta.kind === 'scroll'
+              ? <button type="button" onClick={scrollToCta} className={`client-hero-cta ${radius}`}><heroCta.icon size={19}/>{heroCta.label}<ArrowRight size={17}/></button>
+              : <a href={heroCta.href} onClick={() => phoneLink && record(phoneLink)} className={`client-hero-cta ${radius}`}><heroCta.icon size={19}/>{heroCta.label}</a>}
+          </div>}
 
-          {quickActions.length > 1 && <div className="client-quick-actions mt-7">
-            {quickActions.map((link) => <a key={`quick-${link.id}`} href={link.url} onClick={() => record(link)} target={internalTypes.includes(link.type) ? '_self' : '_blank'} rel="noreferrer" className="client-quick-action">
-              <span><LinkIcon name={resolveLinkIcon(link)} size={23}/></span>
-              <small>{link.type === 'sms' ? 'Text' : link.type === 'phone' ? 'Call' : link.type === 'booking' ? 'Book' : link.label.replace(/^(Follow (us )?on|Visit|View|Our)\s+/i, '').split(' ')[0]}</small>
+          {quickActions.length > 0 && <div className="client-quick-actions-row mt-4">
+            {quickActions.map((link) => <a key={`quick-${link.id}`} href={link.url} onClick={() => record(link)} target={internalTypes.includes(link.type) ? '_self' : '_blank'} rel="noreferrer" className="client-quick-action-pill">
+              <LinkIcon name={resolveLinkIcon(link)} size={16}/>
+              <span>{link.type === 'sms' ? 'Text' : link.type === 'phone' ? 'Call' : link.label.split(' ')[0]}</span>
             </a>)}
           </div>}
 
-          {hubData && <ClientModules businessId={business.id} businessName={business.name} data={hubData}/>}
-
-          {(business.address || business.email) && <div className="client-details mt-7">
-            {business.address && <div><LinkIcon name="directions" size={16}/><span>{business.address}</span></div>}
-            {business.email && <div><LinkIcon name="email" size={16}/><span>{business.email}</span></div>}
-          </div>}
+          {hubData && preferences && <ClientModules business={business} businessName={business.name} links={links} data={hubData} preferences={preferences} openStatus={openStatus ?? null}/>}
         </div>
       </section>
 

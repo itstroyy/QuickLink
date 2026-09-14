@@ -115,3 +115,11 @@ Open [http://localhost:3000](http://localhost:3000).
 4. Add `quicklinkqr.com` under **Project Settings → Domains** and follow Vercel’s DNS instructions.
 
 Business changes made through the admin dashboard do not require another deployment. Only platform code or `NEXT_PUBLIC_` environment changes do.
+
+### Owner accounts and the business dashboard
+
+1. In Supabase, open **SQL Editor → New query**, paste all of `supabase/migrations/202609140001_business_membership.sql`, and run it once. It's additive — no existing business, order, booking or request is touched — and adds `business_members`, `business_invitations`, `business_preferences`, owner-scoped Row Level Security policies, and widens the `orders`/`appointments`/`service_requests` status values to match the Business Inbox.
+2. Open a business in **Admin → Clients → (business) → Owner access** and invite the owner's email. If they don't have a Quicklink account yet, Supabase sends them an invite email; if they already do, access applies automatically the next time they sign in.
+3. The owner signs in at `/login` (password, a one-time email link, or password reset) and lands on `/dashboard` — Home, Activity (the Business Inbox: orders + bookings + service requests, one place), Catalog (products, services, offers, hours, gallery, notifications, Google Calendar), Analytics (outcomes: orders, order value, bookings, requests, primary-action/review/call/text clicks), and More (business profile, appearance, links).
+4. An owner only ever sees the business or businesses they're a member of (`can_manage_business`, enforced by RLS on every table, not just in the UI). The platform admin allowlist (`quicklink_admins`) continues to see and manage everything from `/admin`.
+5. The legacy private **Client Activity** link (`/client/[slug]/activity?token=...`) keeps working unchanged — it's a separate, older access path that doesn't require an account, and revoking it is independent of `business_members`.

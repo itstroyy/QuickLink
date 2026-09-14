@@ -25,7 +25,12 @@ create table if not exists public.service_requests (
 
 create index if not exists service_requests_business_created_idx on public.service_requests(business_id, created_at desc);
 drop trigger if exists service_requests_set_updated_at on public.service_requests;
-create trigger service_requests_set_updated_at before update on public.service_requests for each row execute function public.set_updated_at();
+drop trigger if exists service_requests_set_updated_at
+on public.service_requests;
+
+create trigger service_requests_set_updated_at
+before update on public.service_requests
+for each row execute function public.set_updated_at();
 
 alter table public.service_requests enable row level security;
 drop policy if exists "Admins read service_requests" on public.service_requests;

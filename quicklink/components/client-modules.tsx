@@ -1,11 +1,17 @@
 'use client'
 
-import { useState } from 'react'
-import { ArrowRight, CalendarDays, Check, Clock3, Copy, Images, Megaphone, Send, Sparkles } from 'lucide-react'
-import type { BookingSettings, PublicHubData, RequestServiceSettings } from '@/lib/types'
+import { useFeedback } from '@/components/feedback-provider'
+import { useMemo, useState } from 'react'
+import { ArrowRight, CalendarDays, Check, Clock3, Copy, Images, MapPin, Megaphone, Send, ShoppingBag, Sparkles, Star } from 'lucide-react'
+import type { Business, BusinessLink, BusinessPreferences, PublicHubData } from '@/lib/types'
+import { LinkIcon, resolveLinkIcon } from '@/components/link-icon'
+import type { OpenStatus } from '@/lib/business-hours'
+import { computeEnabledSections, productsSectionTitleFor, resolveSectionOrder, type PublicSectionKey } from '@/lib/section-order'
 import { OrderModule, RequestServiceModule, BookingModule } from '@/components/commerce-modules'
+import type { BookingSettings, RequestServiceSettings } from '@/lib/types'
 
 const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
+const internalLinkTypes = ['phone', 'sms', 'email']
 
 function event(businessId: string, eventType: string, metadata: Record<string, string> = {}) {
   let visitorId = ''
@@ -16,8 +22,17 @@ function event(businessId: string, eventType: string, metadata: Record<string, s
   fetch('/api/analytics', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ businessId, eventType, visitorId, metadata }), keepalive: true }).catch(() => {})
 }
 
-export default function ClientModules({ businessId, businessName, data }: { businessId: string; businessName: string; data: PublicHubData }) {
-  const enabled = new Set(data.features.filter((feature) => feature.enabled).map((feature) => feature.feature_key))
+export default function ClientModules({ business, businessName, links, data, preferences, openStatus }: {
+  business: Business
+  businessName: string
+  links: BusinessLink[]
+  data: PublicHubData
+  preferences: BusinessPreferences
+  openStatus: OpenStatus | null
+}) {
+  const businessId = business.id
+  const notify = useFeedback()
+  const enabled = useMemo(() => new Set(data.features.filter((feature) => feature.enabled).map((feature) => feature.feature_key)), [data.features])
   const primary = data.features.find((feature) => feature.enabled && feature.is_primary)?.feature_key
   const requestFeature = data.features.find((feature) => feature.feature_key === 'request_service')
   const requestSettings = { title: 'Request Service', description: 'Tell us what you need and we’ll follow up.', show_request: true, show_address: false, address_required: false, show_preferred_date: true, show_email: true, email_required: false, show_notes: true, sms_enabled: false, ...(requestFeature?.settings || {}) } as RequestServiceSettings
@@ -27,10 +42,16 @@ export default function ClientModules({ businessId, businessName, data }: { busi
   const [sending, setSending] = useState(false)
   const [bookingOffer, setBookingOffer] = useState<{serviceId?:string;title:string;promoCode?:string}|null>(null)
   const [bookingServiceId, setBookingServiceId] = useState<string | null>(null)
+  const [orderPreselectId, setOrderPreselectId] = useState<string | null>(null)
+  const productsTitle = preferences.products_section_title?.trim() || productsSectionTitleFor(preferences.industry)
   const [copiedPromo, setCopiedPromo] = useState<string | null>(null)
+  const [copiedField, setCopiedField] = useState<string | null>(null)
+
+  const reviewLink = useMemo(() => links.find((link) => link.type === 'google_review' || resolveLinkIcon(link) === 'google_review'), [links])
+  const secondaryLinks = useMemo(() => links.filter((link) => link.id !== reviewLink?.id), [links, reviewLink])
 
   function scrollTo(id: string) {
-    document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    document.getElementById(id)?.scrollIntoView({ behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth', block: 'start' })
   }
 
   function handleOffer(offer: PublicHubData['promotions'][number]) {
@@ -39,8 +60,6 @@ export default function ClientModules({ businessId, businessName, data }: { busi
       case 'order_now': scrollTo('quicklink-order'); return
       case 'request_service': scrollTo('quicklink-request-service'); return
       case 'booking':
-        // Preselect the offer's related service when one is set, so the
-        // customer lands straight on time selection instead of re-picking it.
         setBookingOffer({ serviceId: offer.action_value || undefined, title: offer.title, promoCode: offer.promo_code || undefined })
         setBookingServiceId(null)
         scrollTo('quicklink-booking')
@@ -50,6 +69,13 @@ export default function ClientModules({ businessId, businessName, data }: { busi
       case 'text': if (offer.action_value) window.location.href = `sms:${offer.action_value}`; return
       default: return
     }
+  }
+
+  function selectProduct(productId: string) {
+    if (!enabled.has('ordering')) return
+    event(businessId, 'feature_click', { feature: 'products', productId })
+    setOrderPreselectId(productId)
+    scrollTo('quicklink-order')
   }
 
   function selectService(serviceId: string) {
@@ -64,57 +90,177 @@ export default function ClientModules({ businessId, businessName, data }: { busi
   function copyPromo(code: string) {
     navigator.clipboard.writeText(code).then(() => {
       setCopiedPromo(code)
+      notify('Promo code copied.')
       window.setTimeout(() => setCopiedPromo(null), 1800)
-    }).catch(() => {})
+    }).catch(() => notify('Could not copy. Select the promo code and copy it manually.', 'error'))
+  }
+
+  function copyField(label: string, value: string) {
+    navigator.clipboard.writeText(value).then(() => {
+      setCopiedField(label)
+      notify(`${label} copied.`)
+      window.setTimeout(() => setCopiedField(null), 1800)
+    }).catch(() => notify('Could not copy.', 'error'))
+  }
+
+  function recordLinkClick(link: BusinessLink) {
+    const eventType = link.type === 'phone' ? 'call_click' : link.type === 'sms' ? 'text_click' : link.type === 'directions' ? 'directions_click' : link.type === 'google_review' ? 'review_click' : ['instagram', 'facebook', 'tiktok', 'youtube'].includes(link.type) ? 'social_click' : 'link_click'
+    event(businessId, eventType, { link_type: link.type, linkId: link.id })
   }
 
   async function submitLead(formId: string, formData: FormData) {
+    if (sending) return
     setSending(true)
-    const response = await fetch('/api/leads', { method: 'POST', body: JSON.stringify({
-      businessId, formId, name: formData.get('name'), phone: formData.get('phone'), email: formData.get('email'),
-      message: formData.get('message'), website: formData.get('website'),
-    }), headers: { 'content-type': 'application/json' } })
-    setSending(false)
-    if (response.ok) setSent(formId)
+    try {
+      const response = await fetch('/api/leads', { method: 'POST', body: JSON.stringify({
+        businessId, formId, name: formData.get('name'), phone: formData.get('phone'), email: formData.get('email'),
+        message: formData.get('message'), website: formData.get('website'),
+      }), headers: { 'content-type': 'application/json' } })
+      if (!response.ok) throw new Error('Unable to send')
+      setSent(formId); notify('Your request was sent.')
+    } catch { notify('Could not send your request. Please try again.', 'error') }
+    finally { setSending(false) }
   }
 
-  return <div className="client-modules mt-7 grid gap-5 text-left">
-    {enabled.has('announcements') && data.announcements.length > 0 && <section className="client-module client-announcement">
-      <div className="client-module-kicker"><Megaphone size={13}/> Latest update</div>
-      <h2>{data.announcements[0].title}</h2>{data.announcements[0].body && <p>{data.announcements[0].body}</p>}
-    </section>}
+  const enabledSections = useMemo(() => computeEnabledSections({
+    hasAnnouncements: data.announcements.length > 0,
+    hasProducts: data.products.length > 0,
+    hasOrdering: enabled.has('ordering'),
+    hasServices: data.services.length > 0,
+    hasOffers: data.promotions.length > 0,
+    hasBooking: enabled.has('booking'),
+    hasRequest: enabled.has('request_service'),
+    hasGallery: data.gallery.length > 0,
+    hasHours: data.hours.length > 0,
+    hasReviewLink: Boolean(reviewLink),
+    hasContactInfo: Boolean(business.address || business.phone || business.email || preferences.service_area || preferences.fulfillment_text),
+    hasSecondaryLinks: secondaryLinks.length > 0,
+    hasLeadForm: enabled.has('contact_form') && data.leadForms.length > 0,
+  }), [data, enabled, reviewLink, secondaryLinks, business, preferences])
 
-    {data.promotions.length > 0 && <section className={`client-module ${primary === 'special_offers' ? 'client-module-primary' : ''}`}>
-      <div className="client-module-heading"><div><span className="client-module-kicker"><Sparkles size={13}/> Current offers</span><h2>Something special</h2></div></div>
-      <div className="grid gap-3">{data.promotions.map((offer) => <article key={offer.id} className="client-offer">{offer.image_url&&<img className="client-offer-image" src={offer.image_url} alt=""/>}<div className="client-offer-body"><span>{offer.badge&&<small>{offer.badge}</small>}<strong>{offer.title}</strong>{offer.description&&<em>{offer.description}</em>}</span><div className="client-offer-actions">{offer.promo_code&&<button type="button" className="client-promo-code" onClick={()=>copyPromo(offer.promo_code!)} aria-label={`Copy promo code ${offer.promo_code}`}><code>{offer.promo_code}</code>{copiedPromo===offer.promo_code?<Check size={12}/>:<Copy size={12}/>}</button>}{offer.action_type!=='none'&&<button type="button" className="client-offer-cta" onClick={()=>handleOffer(offer)}>{offer.cta_label||defaultCtaLabel(offer.action_type)}<ArrowRight size={13}/></button>}</div></div></article>)}</div>
-    </section>}
+  const order = useMemo(
+    () => resolveSectionOrder({ savedOrder: preferences.section_order, industry: preferences.industry, enabledSections }),
+    [preferences, enabledSections],
+  )
 
-    {data.services.length > 0 && <section className={`client-module ${primary === 'services' ? 'client-module-primary' : ''}`}>
-      <div className="client-module-heading"><div><span className="client-module-kicker"><CalendarDays size={13}/> Services</span><h2>Choose what you need</h2></div></div>
-      <div className="grid gap-2">{data.services.map((service) => { const bookable = service.bookable !== false && enabled.has('booking'); const content = <><span className="client-service-main">{service.image_url&&<img className="client-service-thumb" src={service.image_url} alt=""/>}<span><strong>{service.name}</strong>{service.description && <small>{service.description}</small>}</span></span><span className="text-right">{service.price_cents != null && <strong>${(service.price_cents / 100).toFixed(2)}</strong>}{service.duration_minutes && <small>{service.duration_minutes} min</small>}{bookable?<ArrowRight size={15}/>:<small className="client-service-view-only">View only</small>}</span></>; return bookable ? <button type="button" key={service.id} onClick={()=>selectService(service.id)} className="client-service client-service-bookable">{content}</button> : <div key={service.id} className="client-service client-service-static">{content}</div> })}</div>
-    </section>}
+  function renderSection(key: PublicSectionKey) {
+    switch (key) {
+      case 'announcements':
+        return <section key={key} className="client-module client-announcement">
+          <div className="client-module-kicker"><Megaphone size={13}/> Latest update</div>
+          <h2>{data.announcements[0].title}</h2>{data.announcements[0].body && <p>{data.announcements[0].body}</p>}
+        </section>
 
-    {enabled.has('booking') && <BookingModule businessId={businessId} businessName={businessName} services={data.services} settings={bookingSettings} primary={primary === 'booking'} selectedOffer={bookingOffer} selectedServiceId={bookingServiceId} onClearOffer={()=>setBookingOffer(null)} onSelectService={selectService} onClearSelectedService={()=>setBookingServiceId(null)}/>} 
-    {enabled.has('ordering') && <OrderModule businessId={businessId} businessName={businessName} products={data.products} primary={primary === 'ordering'}/>}
-    {enabled.has('request_service') && <RequestServiceModule businessId={businessId} businessName={businessName} settings={requestSettings} primary={primary === 'request_service'}/>}
+      case 'offers':
+        return <section key={key} className={`client-module ${primary === 'special_offers' ? 'client-module-primary' : ''}`}>
+          <div className="client-module-heading"><div><span className="client-module-kicker"><Sparkles size={13}/> Current offers</span><h2>Something special</h2></div></div>
+          <div className="grid gap-3">{data.promotions.map((offer) => <article key={offer.id} className="client-offer">{offer.image_url && <img className="client-offer-image" src={offer.image_url} alt=""/>}<div className="client-offer-body"><span>{offer.badge && <small>{offer.badge}</small>}<strong>{offer.title}</strong>{offer.description && <em>{offer.description}</em>}</span><div className="client-offer-actions">{offer.promo_code && <button type="button" className="client-promo-code" onClick={() => copyPromo(offer.promo_code!)} aria-label={`Copy promo code ${offer.promo_code}`}><code>{offer.promo_code}</code>{copiedPromo === offer.promo_code ? <Check size={12}/> : <Copy size={12}/>}</button>}{offer.action_type !== 'none' && <button type="button" className="client-offer-cta" onClick={() => handleOffer(offer)}>{offer.cta_label || defaultCtaLabel(offer.action_type)}<ArrowRight size={13}/></button>}</div></div></article>)}</div>
+        </section>
 
-    {data.gallery.length > 0 && <section className="client-module">
-      <div className="client-module-heading"><div><span className="client-module-kicker"><Images size={13}/> Gallery</span><h2>A look at our work</h2></div></div>
-      <div className="client-gallery">{data.gallery.map((item) => <figure key={item.id}><img src={item.image_url} alt={item.caption || 'Business gallery image'}/>{item.caption && <figcaption>{item.caption}</figcaption>}</figure>)}</div>
-    </section>}
+      case 'products': {
+        const canOrder = enabled.has('ordering')
+        return <div key={key} className="grid gap-5">
+          {data.products.length > 0 && <section className="client-module">
+            <div className="client-module-heading"><div><span className="client-module-kicker"><ShoppingBag size={13}/> {canOrder ? 'Shop' : 'Browse'}</span><h2>{productsTitle}</h2></div></div>
+            <div className="client-products client-showcase-grid">{data.products.slice(0, 8).map((product) => {
+              const card = <>
+                {product.image_url ? <img src={product.image_url} alt=""/> : <span className="client-service-thumb" aria-hidden="true"/>}
+                <span><strong>{product.name}</strong>{product.description && <small>{product.description}</small>}</span>
+                <b>${(product.price_cents / 100).toFixed(2)}</b>
+              </>
+              return canOrder
+                ? <button type="button" key={product.id} onClick={() => selectProduct(product.id)} className="client-product client-service-bookable">{card}</button>
+                : <div key={product.id} className="client-product">{card}</div>
+            })}</div>
+          </section>}
+          {canOrder && <OrderModule businessId={businessId} businessName={businessName} products={data.products} primary={primary === 'ordering'} preselectedProductId={orderPreselectId} onClearPreselected={() => setOrderPreselectId(null)}/>}
+        </div>
+      }
 
-    {data.hours.length > 0 && <section className="client-module">
-      <div className="client-module-heading"><div><span className="client-module-kicker"><Clock3 size={13}/> Hours</span><h2>Plan your visit</h2></div></div>
-      <dl className="client-hours">{data.hours.map((hour) => <div key={hour.id}><dt>{dayNames[hour.day_of_week]}</dt><dd>{hour.closed ? 'Closed' : `${hour.open_time?.slice(0, 5)} – ${hour.close_time?.slice(0, 5)}`}</dd></div>)}</dl>
-    </section>}
+      case 'services':
+        return <section key={key} className={`client-module ${primary === 'services' ? 'client-module-primary' : ''}`}>
+          <div className="client-module-heading"><div><span className="client-module-kicker"><CalendarDays size={13}/> Services</span><h2>Choose what you need</h2></div></div>
+          <div className="grid gap-2">{data.services.map((service) => { const bookable = service.bookable !== false && enabled.has('booking'); const content = <><span className="client-service-main">{service.image_url && <img className="client-service-thumb" src={service.image_url} alt=""/>}<span><strong>{service.name}</strong>{service.description && <small>{service.description}</small>}</span></span><span className="text-right">{service.price_cents != null && <strong>${(service.price_cents / 100).toFixed(2)}</strong>}{service.duration_minutes && <small>{service.duration_minutes} min</small>}{bookable ? <ArrowRight size={15}/> : <small className="client-service-view-only">View only</small>}</span></>; return bookable ? <button type="button" key={service.id} onClick={() => selectService(service.id)} className="client-service client-service-bookable">{content}</button> : <div key={service.id} className="client-service client-service-static">{content}</div> })}</div>
+        </section>
 
-    {enabled.has('contact_form') && data.leadForms.map((form) => <section key={form.id} className={`client-module ${primary === 'contact_form' ? 'client-module-primary' : ''}`}>
-      <div className="client-module-heading"><div><span className="client-module-kicker"><Send size={13}/> Get in touch</span><h2>{form.title}</h2>{form.description && <p>{form.description}</p>}</div></div>
-      {sent === form.id ? <div className="client-form-success">Thanks—your request was sent.</div> : <form action={(formData) => submitLead(form.id, formData)} className="client-lead-form">
-        <input name="website" tabIndex={-1} autoComplete="off" className="hidden"/>
-        {form.fields.includes('name') && <input name="name" placeholder="Name" maxLength={100}/>} {form.fields.includes('phone') && <input name="phone" type="tel" placeholder="Phone" maxLength={40}/>} {form.fields.includes('email') && <input name="email" type="email" placeholder="Email" maxLength={160}/>} {form.fields.includes('message') && <textarea name="message" placeholder="How can we help?" rows={3} maxLength={1500}/>}<button disabled={sending}>{sending ? 'Sending…' : form.cta_label}<ArrowRight size={16}/></button>
-      </form>}
-    </section>)}
+      case 'booking':
+        return <BookingModule key={key} businessId={businessId} businessName={businessName} services={data.services} settings={bookingSettings} primary={primary === 'booking'} selectedOffer={bookingOffer} selectedServiceId={bookingServiceId} onClearOffer={() => setBookingOffer(null)} onSelectService={selectService} onClearSelectedService={() => setBookingServiceId(null)}/>
+
+      case 'request':
+        return <RequestServiceModule key={key} businessId={businessId} businessName={businessName} settings={requestSettings} primary={primary === 'request_service'}/>
+
+      case 'gallery':
+        return <section key={key} className="client-module">
+          <div className="client-module-heading"><div><span className="client-module-kicker"><Images size={13}/> Gallery</span><h2>A look at our work</h2></div></div>
+          <div className="client-gallery">{data.gallery.map((item) => <figure key={item.id}><img src={item.image_url} alt={item.caption || 'Business gallery image'}/>{item.caption && <figcaption>{item.caption}</figcaption>}</figure>)}</div>
+        </section>
+
+      case 'hours':
+        return <section key={key} className="client-module">
+          <div className="client-module-heading"><div><span className="client-module-kicker"><Clock3 size={13}/> Hours</span><h2>Plan your visit</h2></div>{openStatus && <span className={`client-open-pill ${openStatus.isOpen ? 'is-open' : 'is-closed'}`}>{openStatus.shortLabel}</span>}</div>
+          <dl className="client-hours">{data.hours.map((hour) => <div key={hour.id}><dt>{dayNames[hour.day_of_week]}</dt><dd>{hour.closed ? 'Closed' : `${hour.open_time?.slice(0, 5)} – ${hour.close_time?.slice(0, 5)}`}</dd></div>)}</dl>
+        </section>
+
+      case 'reviews':
+        return reviewLink && <section key={key} className="client-module client-module-reviews">
+          <div className="client-module-heading"><div><span className="client-module-kicker"><Star size={13}/> Reviews</span><h2>What customers say</h2></div></div>
+          <a href={reviewLink.url} target="_blank" rel="noreferrer" onClick={() => recordLinkClick(reviewLink)} className="client-review-cta">
+            <LinkIcon name="google_review" size={26}/>
+            <span><strong>Leave us a review on Google</strong><small>Your feedback helps other customers find us.</small></span>
+            <ArrowRight size={18} className="client-link-arrow"/>
+          </a>
+        </section>
+
+      case 'contact': {
+        const rows: Array<{ icon: string; label: string; value: string; copy?: boolean }> = []
+        if (business.address) rows.push({ icon: 'directions', label: 'Address', value: business.address })
+        if (preferences.service_area) rows.push({ icon: 'directions', label: 'Service area', value: preferences.service_area })
+        if (business.phone) rows.push({ icon: 'phone', label: 'Phone', value: business.phone, copy: true })
+        if (business.email) rows.push({ icon: 'email', label: 'Email', value: business.email, copy: true })
+        if (!rows.length && !preferences.fulfillment_text) return null
+        return <section key={key} className="client-module">
+          <div className="client-module-heading"><div><span className="client-module-kicker"><MapPin size={13}/> Contact</span><h2>Get in touch</h2></div></div>
+          {preferences.fulfillment_text && <p className="mb-3 text-[12px] leading-5" style={{ color: 'var(--muted-text)' }}>{preferences.fulfillment_text}</p>}
+          <div className="client-details !justify-start !border-0 !pt-0">{rows.map((row) => <div key={row.label}>
+            <LinkIcon name={row.icon} size={16}/><span>{row.value}</span>
+            {row.copy && <button type="button" onClick={() => copyField(row.label, row.value)} className="client-top-icon !h-6 !w-6 !min-h-0" aria-label={`Copy ${row.label.toLowerCase()}`}>{copiedField === row.label ? <Check size={12}/> : <Copy size={12}/>}</button>}
+          </div>)}</div>
+        </section>
+      }
+
+      case 'links':
+        return secondaryLinks.length > 0 && <section key={key} className="client-module client-module-links">
+          <div className="client-module-heading"><div><span className="client-module-kicker">More ways to connect</span></div></div>
+          <div className="grid gap-2">{secondaryLinks.map((link) => <a
+            key={link.id}
+            href={link.url}
+            onClick={() => recordLinkClick(link)}
+            target={internalLinkTypes.includes(link.type) ? '_self' : '_blank'}
+            rel="noreferrer"
+            className="client-link-compact"
+          ><LinkIcon name={resolveLinkIcon(link)} size={17}/><span className="truncate">{link.label}</span><ArrowRight size={14} className="client-link-arrow"/></a>)}</div>
+        </section>
+
+      case 'lead':
+        return data.leadForms.map((form) => <section key={form.id} className={`client-module ${primary === 'contact_form' ? 'client-module-primary' : ''}`}>
+          <div className="client-module-heading"><div><span className="client-module-kicker"><Send size={13}/> Get in touch</span><h2>{form.title}</h2>{form.description && <p>{form.description}</p>}</div></div>
+          {sent === form.id ? <div className="client-form-success">Thanks—your request was sent.</div> : <form action={(formData) => submitLead(form.id, formData)} className="client-lead-form">
+            <input name="website" tabIndex={-1} autoComplete="off" className="hidden"/>
+            {form.fields.includes('name') && <input name="name" placeholder="Name" maxLength={100}/>} {form.fields.includes('phone') && <input name="phone" type="tel" placeholder="Phone" maxLength={40}/>} {form.fields.includes('email') && <input name="email" type="email" placeholder="Email" maxLength={160}/>} {form.fields.includes('message') && <textarea name="message" placeholder="How can we help?" rows={3} maxLength={1500}/>}<button disabled={sending}>{sending ? 'Sending…' : form.cta_label}<ArrowRight size={16}/></button>
+          </form>}
+        </section>)
+
+      default:
+        return null
+    }
+  }
+
+  // Hours and Contact are short, list-style sections that read fine side by
+  // side once there's room — everything else stays full-width so the page
+  // doesn't turn into a patchwork on desktop.
+  const pairedKeys: PublicSectionKey[] = ['hours', 'contact']
+  return <div className="client-modules mt-7 grid gap-5 text-left sm:grid-cols-2">
+    {order.map((key) => <div key={key} className={pairedKeys.includes(key) ? 'sm:col-span-1' : 'sm:col-span-2'}>{renderSection(key)}</div>)}
   </div>
 }
 
