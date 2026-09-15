@@ -26,7 +26,7 @@ export async function requireOwnerContext(preferredBusinessId?: string) {
     businesses = ((data || []) as Business[]).map((business) => ({ ...business, role: 'admin' as const }))
   } else {
     const { data } = await supabase.from('business_members').select('role,businesses(*)').eq('user_id', user.id)
-    businesses = ((data || []) as Array<{ role: OwnerRole; businesses: Business | null }>)
+    businesses = ((data || []) as unknown as Array<{ role: OwnerRole; businesses: Business | null }>)
       .filter((row): row is { role: OwnerRole; businesses: Business } => Boolean(row.businesses) && row.businesses!.status !== 'archived')
       .map((row) => ({ ...row.businesses, role: row.role }))
       .sort((a, b) => a.name.localeCompare(b.name))

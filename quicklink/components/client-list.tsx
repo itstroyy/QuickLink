@@ -6,6 +6,7 @@ import { Archive, Copy, ExternalLink, Pencil, Search } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { themeNames, themePresets } from '@/lib/themes'
 import type { Business } from '@/lib/types'
+import ConfirmationDialog from '@/components/confirmation-dialog'
 
 const accessLabels: Record<'owner' | 'pending' | 'expired' | 'none', { label: string; className: string }> = {
   owner: { label: 'Owner active', className: 'bg-[#e6f1e7] text-[#46734d]' },
@@ -20,6 +21,7 @@ export default function ClientList({ initialBusinesses, accessByBusiness = {} }:
   const [status, setStatus] = useState('all')
   const [theme, setTheme] = useState('all')
   const [message, setMessage] = useState('')
+  const [pendingArchive, setPendingArchive] = useState<Business | null>(null)
   const visible = useMemo(() => businesses.filter((business) => {
     const matchesSearch = `${business.name} ${business.slug} ${business.category ?? ''}`.toLowerCase().includes(search.toLowerCase())
     return matchesSearch && (status === 'all' || business.status === status) && (theme === 'all' || business.theme === theme)
@@ -33,10 +35,10 @@ export default function ClientList({ initialBusinesses, accessByBusiness = {} }:
   }
 
   async function archive(business: Business) {
-    if (!window.confirm(`Archive ${business.name}? Its public page will become unavailable, but its information will be kept.`)) return
     const { error } = await createClient().from('businesses').update({ status: 'archived' }).eq('id', business.id)
     if (error) setMessage(error.message)
     else setBusinesses((current) => current.filter((item) => item.id !== business.id))
+    setPendingArchive(null)
   }
 
   return <>
@@ -53,8 +55,9 @@ export default function ClientList({ initialBusinesses, accessByBusiness = {} }:
         <a href={`/${business.slug}`} target="_blank" rel="noreferrer" className="truncate text-sm text-[#77776f] hover:text-[#1d1d1b]">/{business.slug}</a>
         <span className={`w-fit rounded-full px-2.5 py-1 text-[11px] font-semibold ${access.className}`}>{access.label}</span>
         <button onClick={() => toggleStatus(business)} className={`w-fit rounded-full px-2.5 py-1 text-xs font-semibold ${business.status === 'active' ? 'bg-[#e6f1e7] text-[#46734d]' : 'bg-[#f2e8d8] text-[#8b623d]'}`}>{business.status}</button>
-        <div className="flex justify-end gap-1"><Link href={`/${business.slug}`} target="_blank" className="icon-button" aria-label={`View ${business.name}`}><ExternalLink size={16}/></Link><Link href={`/admin/clients/${business.id}/edit`} className="icon-button" aria-label={`Edit ${business.name}`}><Pencil size={16}/></Link><Link href={`/admin/clients/new?duplicate=${business.id}`} className="icon-button" aria-label={`Duplicate ${business.name}`}><Copy size={16}/></Link><button onClick={() => archive(business)} className="icon-button text-red-600" aria-label={`Archive ${business.name}`}><Archive size={16}/></button></div>
+        <div className="flex justify-end gap-1"><Link href={`/${business.slug}`} target="_blank" className="icon-button" aria-label={`View ${business.name}`}><ExternalLink size={16}/></Link><Link href={`/admin/clients/${business.id}/edit`} className="icon-button" aria-label={`Edit ${business.name}`}><Pencil size={16}/></Link><Link href={`/admin/clients/new?duplicate=${business.id}`} className="icon-button" aria-label={`Duplicate ${business.name}`}><Copy size={16}/></Link><button onClick={() => setPendingArchive(business)} className="icon-button text-red-600" aria-label={`Archive ${business.name}`}><Archive size={16}/></button></div>
       </div> })}{visible.length === 0 && <p className="px-5 py-14 text-center text-sm text-[#77776f]">No clients match those filters. <button type="button" onClick={() => { setSearch(''); setStatus('all'); setTheme('all') }} className="ml-1 font-semibold text-[#8b6b3d] underline">Clear filters</button></p>}</div>
     </div>
+    <ConfirmationDialog open={Boolean(pendingArchive)} title="Archive business?" body={`${pendingArchive?.name || 'This business'} will become unavailable publicly, but its information and history will be kept.`} confirmLabel="Archive" onCancel={()=>setPendingArchive(null)} onConfirm={()=>{ if (pendingArchive) return archive(pendingArchive) }}/>
   </>
 }

@@ -2,8 +2,9 @@ import type { Metadata } from 'next'
 import { createClient } from '@/lib/supabase/server'
 import { requireOwnerContext } from '@/lib/dashboard/business-context'
 import PreferencesEditor from '@/components/dashboard/preferences-editor'
+import BusinessModeSettings from '@/components/dashboard/business-mode-settings'
 import { defaultPrimaryActionFor, industryDefaultSectionOrder, type BusinessIndustry } from '@/lib/section-order'
-import type { Business, BusinessLink, BusinessPreferences } from '@/lib/types'
+import type { Business, BusinessFeature, BusinessLink, BusinessPreferences } from '@/lib/types'
 
 export const metadata: Metadata = { title: 'Page Settings — Quicklink', robots: { index: false, follow: false } }
 
@@ -34,6 +35,8 @@ export default async function DashboardSettingsPage({ searchParams }: { searchPa
     service_area: null,
     fulfillment_text: null,
     products_section_title: null,
+    show_public_hours: true,
+    show_open_status: true,
     updated_at: business.updated_at,
   }
 
@@ -45,6 +48,7 @@ export default async function DashboardSettingsPage({ searchParams }: { searchPa
     <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#8b6b3d]">{business.name}</p>
     <h1 className="mt-2 text-3xl font-semibold tracking-tight sm:text-4xl">Page settings</h1>
     <p className="mt-2 text-[#77776f]">Control how your public Quicklink page is organized — what customers see first, in what order, and how your hours and location are presented.</p>
+    <BusinessModeSettings businessId={business.id} initial={features as BusinessFeature[]}/>
 
     <PreferencesEditor
       business={business as Business}

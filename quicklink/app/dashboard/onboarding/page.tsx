@@ -51,7 +51,7 @@ export default async function DashboardOnboardingPage({ searchParams }: { search
     { key: 'hours', label: 'Set your hours', hint: 'Shown live as "Open now" / "Closed" on your page.', done: hasHours, href: withBusiness('/dashboard/catalog#hours', business.id) },
     { key: 'action', label: 'Turn on a primary action', hint: primaryGroup === 'ordering' ? 'Turn on Ordering.' : primaryGroup === 'booking' ? 'Turn on Booking.' : primaryGroup === 'request_service' ? 'Turn on Request / Quote.' : 'Turn on ordering, booking or requests.', done: hasAction, href: withBusiness('/dashboard/catalog', business.id) },
     { key: 'branding', label: 'Add your logo', hint: 'Shown at the top of your public page.', done: Boolean(business.logo_url), href: withBusiness('/dashboard/more', business.id) },
-    { key: 'notifications', label: 'Notifications', hint: "So you don't miss a new order, booking or request.", done: hasNotifications, href: withBusiness('/dashboard/more', business.id) },
+    { key: 'notifications', label: 'Notifications', hint: "So you don't miss a new order, booking or request.", done: hasNotifications, href: withBusiness('/dashboard/integrations', business.id) },
     { key: 'reviews', label: 'Add your review link (optional)', hint: 'A button so happy customers can leave a Google review.', href: withBusiness('/dashboard/settings', business.id), done: hasReviewLink, optional: true },
   ]
   const requiredSteps = steps.filter((s) => !s.optional)

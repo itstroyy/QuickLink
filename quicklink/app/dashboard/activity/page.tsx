@@ -10,11 +10,13 @@ export default async function DashboardActivityPage({ searchParams }: { searchPa
   const { business: preferred } = await searchParams
   const { business } = await requireOwnerContext(preferred)
   const supabase = await createClient()
-  const [orders, appointments, requests] = await Promise.all([
-    supabase.from('orders').select('*,order_items(*)').eq('business_id', business.id).order('created_at', { ascending: false }).limit(300),
-    supabase.from('appointments').select('*').eq('business_id', business.id).order('appointment_date', { ascending: false }).order('start_time', { ascending: false }).limit(300),
-    supabase.from('service_requests').select('*').eq('business_id', business.id).order('created_at', { ascending: false }).limit(300),
+  const [orders, appointments, requests, features] = await Promise.all([
+    supabase.from('orders').select('*,order_items(*),payments(*)').eq('business_id', business.id).order('created_at', { ascending: false }).limit(300),
+    supabase.from('appointments').select('*,booking_services(*),payments(*)').eq('business_id', business.id).order('appointment_date', { ascending: false }).order('start_time', { ascending: false }).limit(300),
+    supabase.from('service_requests').select('*,payments(*)').eq('business_id', business.id).order('created_at', { ascending: false }).limit(300),
+    supabase.from('business_features').select('feature_key,enabled').eq('business_id',business.id),
   ])
+  const enabled=new Set((features.data||[]).filter(row=>row.enabled).map(row=>row.feature_key))
 
   return <main className="px-5 py-8 lg:px-10 lg:py-10"><div className="mx-auto max-w-6xl">
     <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#8b6b3d]">{business.name}</p>
@@ -25,6 +27,7 @@ export default async function DashboardActivityPage({ searchParams }: { searchPa
       initialOrders={(orders.data || []) as CustomerOrder[]}
       initialAppointments={(appointments.data || []) as Appointment[]}
       initialRequests={(requests.data || []) as ServiceRequest[]}
+      enabledKinds={{orders:enabled.has('ordering'),bookings:enabled.has('booking'),requests:enabled.has('request_service')}}
     /></div>
   </div></main>
 }

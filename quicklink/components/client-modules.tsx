@@ -8,7 +8,8 @@ import { LinkIcon, resolveLinkIcon } from '@/components/link-icon'
 import type { OpenStatus } from '@/lib/business-hours'
 import { computeEnabledSections, productsSectionTitleFor, resolveSectionOrder, type PublicSectionKey } from '@/lib/section-order'
 import { OrderModule, RequestServiceModule, BookingModule } from '@/components/commerce-modules'
-import type { BookingSettings, RequestServiceSettings } from '@/lib/types'
+import type { BookingSettings, OrderCustomerSettings, RequestServiceSettings } from '@/lib/types'
+import { orderCustomerSettings } from '@/lib/order-settings'
 
 const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
 const internalLinkTypes = ['phone', 'sms', 'email']
@@ -34,6 +35,8 @@ export default function ClientModules({ business, businessName, links, data, pre
   const notify = useFeedback()
   const enabled = useMemo(() => new Set(data.features.filter((feature) => feature.enabled).map((feature) => feature.feature_key)), [data.features])
   const primary = data.features.find((feature) => feature.enabled && feature.is_primary)?.feature_key
+  const orderingFeature = data.features.find((feature) => feature.feature_key === 'ordering')
+  const orderingSettings = orderCustomerSettings(orderingFeature?.settings) as OrderCustomerSettings
   const requestFeature = data.features.find((feature) => feature.feature_key === 'request_service')
   const requestSettings = { title: 'Request Service', description: 'Tell us what you need and we’ll follow up.', show_request: true, show_address: false, address_required: false, show_preferred_date: true, show_email: true, email_required: false, show_notes: true, sms_enabled: false, ...(requestFeature?.settings || {}) } as RequestServiceSettings
   const bookingFeature = data.features.find((feature) => feature.feature_key === 'booking')
@@ -131,7 +134,7 @@ export default function ClientModules({ business, businessName, links, data, pre
     hasBooking: enabled.has('booking'),
     hasRequest: enabled.has('request_service'),
     hasGallery: data.gallery.length > 0,
-    hasHours: data.hours.length > 0,
+    hasHours: preferences.show_public_hours && data.hours.length > 0,
     hasReviewLink: Boolean(reviewLink),
     hasContactInfo: Boolean(business.address || business.phone || business.email || preferences.service_area || preferences.fulfillment_text),
     hasSecondaryLinks: secondaryLinks.length > 0,
@@ -159,6 +162,7 @@ export default function ClientModules({ business, businessName, links, data, pre
 
       case 'products': {
         const canOrder = enabled.has('ordering')
+        if (canOrder) return <OrderModule key={key} businessId={businessId} businessName={businessName} products={data.products} settings={orderingSettings} paymentConfig={data.paymentConfig} sectionTitle={productsTitle} primary={primary === 'ordering'} preselectedProductId={orderPreselectId} onClearPreselected={() => setOrderPreselectId(null)}/>
         return <div key={key} className="grid gap-5">
           {data.products.length > 0 && <section className="client-module">
             <div className="client-module-heading"><div><span className="client-module-kicker"><ShoppingBag size={13}/> {canOrder ? 'Shop' : 'Browse'}</span><h2>{productsTitle}</h2></div></div>
@@ -168,23 +172,20 @@ export default function ClientModules({ business, businessName, links, data, pre
                 <span><strong>{product.name}</strong>{product.description && <small>{product.description}</small>}</span>
                 <b>${(product.price_cents / 100).toFixed(2)}</b>
               </>
-              return canOrder
-                ? <button type="button" key={product.id} onClick={() => selectProduct(product.id)} className="client-product client-service-bookable">{card}</button>
-                : <div key={product.id} className="client-product">{card}</div>
+              return <div key={product.id} className="client-product">{card}</div>
             })}</div>
           </section>}
-          {canOrder && <OrderModule businessId={businessId} businessName={businessName} products={data.products} primary={primary === 'ordering'} preselectedProductId={orderPreselectId} onClearPreselected={() => setOrderPreselectId(null)}/>}
         </div>
       }
 
       case 'services':
         return <section key={key} className={`client-module ${primary === 'services' ? 'client-module-primary' : ''}`}>
           <div className="client-module-heading"><div><span className="client-module-kicker"><CalendarDays size={13}/> Services</span><h2>Choose what you need</h2></div></div>
-          <div className="grid gap-2">{data.services.map((service) => { const bookable = service.bookable !== false && enabled.has('booking'); const content = <><span className="client-service-main">{service.image_url && <img className="client-service-thumb" src={service.image_url} alt=""/>}<span><strong>{service.name}</strong>{service.description && <small>{service.description}</small>}</span></span><span className="text-right">{service.price_cents != null && <strong>${(service.price_cents / 100).toFixed(2)}</strong>}{service.duration_minutes && <small>{service.duration_minutes} min</small>}{bookable ? <ArrowRight size={15}/> : <small className="client-service-view-only">View only</small>}</span></>; return bookable ? <button type="button" key={service.id} onClick={() => selectService(service.id)} className="client-service client-service-bookable">{content}</button> : <div key={service.id} className="client-service client-service-static">{content}</div> })}</div>
+          <div className="grid gap-2">{data.services.map((service) => { const action=service.action_type||(service.bookable?'bookable':'display_only'); const bookable = action==='bookable' && enabled.has('booking'); const requestable=action==='request_quote'&&enabled.has('request_service'); const content = <><span className="client-service-main">{service.image_url && <img className="client-service-thumb" src={service.image_url} alt=""/>}<span><strong>{service.name}</strong>{service.description && <small>{service.description}</small>}</span></span><span className="text-right">{service.price_cents != null && <strong>${(service.price_cents / 100).toFixed(2)}</strong>}{service.duration_minutes && <small>{service.duration_minutes} min</small>}{bookable||requestable?<ArrowRight size={15}/>:<small className="client-service-view-only">Details</small>}</span></>; return bookable ? <button type="button" key={service.id} onClick={() => selectService(service.id)} className="client-service client-service-bookable">{content}</button> : requestable?<button type="button" key={service.id} onClick={()=>scrollTo('quicklink-request-service')} className="client-service client-service-bookable">{content}</button>:<div key={service.id} className="client-service client-service-static">{content}</div> })}</div>
         </section>
 
       case 'booking':
-        return <BookingModule key={key} businessId={businessId} businessName={businessName} services={data.services} settings={bookingSettings} primary={primary === 'booking'} selectedOffer={bookingOffer} selectedServiceId={bookingServiceId} onClearOffer={() => setBookingOffer(null)} onSelectService={selectService} onClearSelectedService={() => setBookingServiceId(null)}/>
+        return <BookingModule key={key} businessId={businessId} businessName={businessName} services={data.services} settings={bookingSettings} paymentConfig={data.paymentConfig} primary={primary === 'booking'} selectedOffer={bookingOffer} selectedServiceId={bookingServiceId} onClearOffer={() => setBookingOffer(null)} onSelectService={selectService} onClearSelectedService={() => setBookingServiceId(null)}/>
 
       case 'request':
         return <RequestServiceModule key={key} businessId={businessId} businessName={businessName} settings={requestSettings} primary={primary === 'request_service'}/>

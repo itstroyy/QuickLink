@@ -1,6 +1,6 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
-import { BarChart3, CalendarClock, ClipboardList, Eye, MousePointerClick, Phone, ShoppingBag, Star } from 'lucide-react'
+import { BarChart3, CalendarClock, CheckCircle2, ClipboardList, CreditCard, Eye, MousePointerClick, Phone, RotateCcw, Send, ShoppingBag, Star } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
 import { requireOwnerContext } from '@/lib/dashboard/business-context'
 
@@ -24,12 +24,15 @@ export default async function DashboardAnalyticsPage({ searchParams }: { searchP
   if (since) eventQuery = eventQuery.gte('created_at', since)
   let orderQuery = supabase.from('orders').select('total_cents,status,created_at').eq('business_id', business.id)
   if (since) orderQuery = orderQuery.gte('created_at', since)
-  let bookingQuery = supabase.from('appointments').select('id,status,created_at').eq('business_id', business.id)
+  let bookingQuery = supabase.from('appointments').select('id,status,total_price_cents,amount_paid_cents,payment_status,created_at').eq('business_id', business.id)
   if (since) bookingQuery = bookingQuery.gte('created_at', since)
-  let requestQuery = supabase.from('service_requests').select('id,status,created_at').eq('business_id', business.id)
+  let requestQuery = supabase.from('service_requests').select('id,status,quote_sent_at,quote_accepted_at,payment_status,created_at').eq('business_id', business.id)
   if (since) requestQuery = requestQuery.gte('created_at', since)
 
-  const [{ data: events }, { data: orders }, { data: bookings }, { data: requests }] = await Promise.all([eventQuery, orderQuery, bookingQuery, requestQuery])
+  let paymentQuery = supabase.from('payments').select('kind,status,amount_paid_cents,created_at').eq('business_id',business.id)
+  let refundQuery = supabase.from('refunds').select('amount_cents,status,created_at').eq('business_id',business.id)
+  if(since){paymentQuery=paymentQuery.gte('created_at',since);refundQuery=refundQuery.gte('created_at',since)}
+  const [{ data: events }, { data: orders }, { data: bookings }, { data: requests }, {data:features},{data:payments},{data:refunds}] = await Promise.all([eventQuery, orderQuery, bookingQuery, requestQuery,supabase.from('business_features').select('feature_key,enabled').eq('business_id',business.id),paymentQuery,refundQuery])
 
   const pageViews = (events || []).filter((event) => event.event_type === 'page_view').length
   const uniqueVisitors = new Set((events || []).map((event) => event.visitor_id).filter(Boolean)).size
@@ -42,6 +45,19 @@ export default async function DashboardAnalyticsPage({ searchParams }: { searchP
   const orderValueCents = (orders || []).filter((order) => order.status !== 'cancelled').reduce((sum, order) => sum + (order.total_cents || 0), 0)
   const bookingCount = (bookings || []).filter((booking) => booking.status !== 'cancelled').length
   const requestCount = (requests || []).length
+  const enabled=new Set((features||[]).filter(feature=>feature.enabled).map(feature=>feature.feature_key))
+  const paidOrders=(payments||[]).filter(payment=>payment.kind==='order'&&['paid','partially_refunded','refunded'].includes(payment.status)).length
+  const refundTotal=(refunds||[]).filter(refund=>refund.status==='succeeded').reduce((sum,refund)=>sum+refund.amount_cents,0)
+  const bookingValue=(bookings||[]).filter(booking=>booking.status!=='cancelled').reduce((sum,booking)=>sum+(booking.total_price_cents||0),0)
+  const deposits=(bookings||[]).filter(booking=>booking.payment_status==='deposit_paid').length
+  const quotesSent=(requests||[]).filter(item=>item.quote_sent_at).length
+  const quotesAccepted=(requests||[]).filter(item=>item.quote_accepted_at).length
+  const quotesPaid=(requests||[]).filter(item=>item.payment_status==='paid').length
+  const outcomeMetrics=[
+    ...(enabled.has('ordering')?[{icon:ShoppingBag,label:'Orders',value:orderCount},{icon:BarChart3,label:'Order value',value:`$${(orderValueCents/100).toFixed(2)}`},{icon:CreditCard,label:'Paid online',value:paidOrders},...(refundTotal?[{icon:RotateCcw,label:'Refunded',value:`$${(refundTotal/100).toFixed(2)}`}]:[])]:[]),
+    ...(enabled.has('booking')?[{icon:CalendarClock,label:'Bookings',value:bookingCount},{icon:BarChart3,label:'Booking value',value:`$${(bookingValue/100).toFixed(2)}`},{icon:CreditCard,label:'Deposits paid',value:deposits}]:[]),
+    ...(enabled.has('request_service')?[{icon:ClipboardList,label:'Service requests',value:requestCount},{icon:Send,label:'Quotes sent',value:quotesSent},{icon:CheckCircle2,label:'Quotes accepted',value:quotesAccepted},{icon:CreditCard,label:'Paid quotes',value:quotesPaid}]:[]),
+  ]
 
   return <main className="px-5 py-8 lg:px-10 lg:py-10"><div className="mx-auto max-w-6xl">
     <div className="flex flex-wrap items-end justify-between gap-4">
@@ -49,12 +65,7 @@ export default async function DashboardAnalyticsPage({ searchParams }: { searchP
       <nav className="flex rounded-full border bg-white p-1 text-xs font-semibold">{Object.keys(ranges).map((key) => <Link key={key} href={`/dashboard/analytics?business=${business.id}&range=${key}`} className={`rounded-full px-3 py-2 ${range === key ? 'bg-[#1d1d1b] text-white' : 'text-[#77776f]'}`}>{key === 'all' ? 'All time' : key === 'today' ? 'Today' : `Last ${key}`}</Link>)}</nav>
     </div>
 
-    <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-      <Metric icon={ShoppingBag} label="Orders" value={orderCount}/>
-      <Metric icon={BarChart3} label="Order value" value={`$${(orderValueCents / 100).toFixed(2)}`}/>
-      <Metric icon={CalendarClock} label="Bookings" value={bookingCount}/>
-      <Metric icon={ClipboardList} label="Service requests" value={requestCount}/>
-    </div>
+    <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">{outcomeMetrics.map(metric=><Metric key={metric.label} {...metric}/>)}</div>
     <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
       <Metric icon={MousePointerClick} label="Primary action clicks" value={primaryClicks}/>
       <Metric icon={Star} label="Review clicks" value={reviewClicks}/>

@@ -12,10 +12,19 @@ export default async function ManageBookingPage({ params }: { params: Promise<{ 
   return <BookingManageCard token={token} booking={{
     customerName: appointment.customer_name,
     businessName: business?.name || 'Your business',
+    businessSlug: business?.slug || '',
     serviceName: appointment.service_name,
+    services: appointment.services || [],
     date: appointment.appointment_date,
     startTime: appointment.start_time,
     endTime: appointment.end_time,
     status: appointment.status,
+    totalPriceCents: appointment.total_price_cents || 0,
+    amountDueCents: appointment.amount_due_cents || 0,
+    amountPaidCents: appointment.amount_paid_cents || 0,
+    paymentStatus: appointment.payment_status || 'not_required',
+    currency: appointment.currency || 'usd',
+    policySnapshot: appointment.policy_snapshot || {},
+    receiptUrl: appointment.receipt_url || null,
   }}/>
 }

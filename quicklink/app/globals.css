@@ -27,6 +27,14 @@
 .feature-tile:hover { transform: translateY(-4px); box-shadow: 0 12px 24px rgba(30,25,20,.08); }
 .form-control { min-height: 2.75rem; width: 100%; border: 1px solid #d9d9d3; border-radius: .75rem; background: #fff; padding: .65rem .8rem; font-size: .875rem; outline: none; transition: border-color .2s, box-shadow .2s; }
 .form-control:focus { border-color: #8b6b3d; box-shadow: 0 0 0 3px rgba(139,107,61,.10); }
+.dashboard-primary, .dashboard-secondary { display: inline-flex; min-height: 2.75rem; align-items: center; justify-content: center; border-radius: .75rem; padding: .65rem 1rem; font-size: .875rem; font-weight: 650; line-height: 1.2; transition: transform .18s ease, background-color .18s ease, border-color .18s ease, box-shadow .18s ease; }
+.dashboard-primary { border: 1px solid #1d1d1b; background: #1d1d1b; color: #fff; box-shadow: 0 7px 18px rgba(29,29,27,.14); }
+.dashboard-primary:hover { transform: translateY(-1px); background: #33332f; border-color: #33332f; box-shadow: 0 9px 22px rgba(29,29,27,.18); }
+.dashboard-secondary { border: 1px solid #d8d6ce; background: #fff; color: #34342f; }
+.dashboard-secondary:hover { transform: translateY(-1px); border-color: #b9b6aa; background: #fafaf7; }
+.dashboard-primary:focus-visible, .dashboard-secondary:focus-visible { outline: 2px solid #8b6b3d; outline-offset: 3px; }
+.dashboard-primary:active, .dashboard-secondary:active { transform: translateY(0); }
+.dashboard-primary:disabled, .dashboard-secondary:disabled { cursor: not-allowed; transform: none; box-shadow: none; }
 .icon-button { display: inline-flex; height: 2.5rem; width: 2.5rem; align-items: center; justify-content: center; border-radius: .65rem; color: #77776f; transition: background .2s; }
 .icon-button:hover { background: #eeece5; }
 .icon-button:disabled { cursor: not-allowed; opacity: .3; }
@@ -255,7 +263,36 @@ button.client-product.client-service-bookable:focus-visible { outline: 2px solid
 .client-commerce-field:focus { border-color: var(--accent); }
 .client-choice { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }.client-choice button { border: 1px solid color-mix(in srgb,var(--main-text) 14%,transparent); border-radius: 11px; padding: 10px; font-size: 11px; font-weight: 700; }.client-choice button.active { border-color: var(--accent); background: color-mix(in srgb,var(--accent) 18%,transparent); }
 .client-commerce-nav { display: flex; justify-content: space-between; gap: 8px; margin-top: 5px; }.client-commerce-nav button { display: flex; min-height: 42px; flex: 1; align-items: center; justify-content: center; gap: 6px; border: 1px solid color-mix(in srgb,var(--main-text) 14%,transparent); border-radius: 12px; font-size: 11px; font-weight: 700; }.client-commerce-nav button:last-child { border-color: var(--accent); background: var(--accent); color: var(--button-text); }.client-commerce-nav button:disabled { opacity: .4; }
-.client-order-review > div { display: grid; gap: 7px; }.client-order-review p { display: flex; justify-content: space-between; gap: 10px; font-size: 11px; }.client-order-review .total { margin-top: 11px; border-top: 1px solid color-mix(in srgb,var(--main-text) 12%,transparent); padding-top: 11px; font-size: 14px; }.client-order-review > small { display: block; margin-top: 9px; color: var(--muted-text); font-size: 9px; line-height: 1.5; }
+/* Order review / payment step — a professional, itemized checkout summary
+   in place of the old one-line "Delivery to ..." sentence. Scoped under
+   .client-order-review so it never touches the products/details/booking
+   steps, which share .client-commerce-nav, .client-commerce-form, etc. */
+.client-order-review { display: grid; gap: 14px; }
+.client-order-summary { border: 1px solid color-mix(in srgb,var(--main-text) 12%,transparent); border-radius: 15px; padding: 13px 14px; background: color-mix(in srgb,var(--card-bg) 60%,transparent); }
+.client-order-summary-row { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; padding: 6px 0; }
+.client-order-summary-row + .client-order-summary-row { border-top: 1px solid color-mix(in srgb,var(--main-text) 8%,transparent); }
+.client-order-summary-name { display: flex; align-items: baseline; gap: 6px; color: var(--main-text); font-size: 12px; font-weight: 600; }
+.client-order-summary-name small { color: var(--muted-text); font-size: 10px; font-weight: 600; }
+.client-order-summary-row > strong { flex-shrink: 0; font-size: 12px; font-weight: 700; }
+.client-order-summary-total { display: flex; align-items: center; justify-content: space-between; margin-top: 10px; border-top: 1px solid color-mix(in srgb,var(--main-text) 16%,transparent); padding-top: 11px; }
+.client-order-summary-total span { color: var(--muted-text); font-size: 10px; font-weight: 750; letter-spacing: .08em; text-transform: uppercase; }
+.client-order-summary-total strong { font-size: 18px; font-weight: 800; color: var(--main-text); }
+.client-order-delivery { border: 1px solid color-mix(in srgb,var(--main-text) 12%,transparent); border-radius: 15px; padding: 13px 14px; background: color-mix(in srgb,var(--card-bg) 60%,transparent); }
+.client-order-delivery-title { margin: 0 0 9px; color: var(--accent); font-size: 10px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; }
+.client-order-delivery dl { display: grid; gap: 6px; margin: 0; }
+.client-order-delivery dl > div { display: flex; justify-content: space-between; gap: 12px; }
+.client-order-delivery dt { flex-shrink: 0; color: var(--muted-text); font-size: 10px; font-weight: 600; }
+.client-order-delivery dd { margin: 0; max-width: 68%; overflow-wrap: break-word; text-align: right; color: var(--main-text); font-size: 11px; font-weight: 600; }
+.client-trust-row { display: flex; align-items: flex-start; gap: 10px; border-radius: 13px; background: color-mix(in srgb,var(--accent) 9%,var(--card-bg)); padding: 11px 13px; }
+.client-trust-row svg { flex-shrink: 0; margin-top: 1px; color: var(--accent); }
+.client-trust-row strong { display: block; color: var(--main-text); font-size: 11px; font-weight: 750; }
+.client-trust-row small { display: block; margin-top: 2px; color: var(--muted-text); font-size: 9.5px; line-height: 1.5; }
+.client-order-review .client-commerce-nav button { transition: transform .15s ease, box-shadow .15s ease, border-color .15s ease, color .15s ease; }
+.client-order-review .client-commerce-nav button:last-child { font-weight: 800; box-shadow: 0 10px 24px color-mix(in srgb,var(--accent) 35%,transparent); }
+.client-order-review .client-commerce-nav button:last-child:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 14px 30px color-mix(in srgb,var(--accent) 42%,transparent); }
+.client-order-review .client-commerce-nav button:first-child:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+.client-order-review .client-commerce-nav button:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.client-order-review .client-commerce-nav button:disabled { cursor: not-allowed; }
 .client-commerce-success { display: grid; justify-items: center; gap: 7px; padding: 18px 8px; color: var(--main-text); text-align: center; }.client-commerce-success svg { color: var(--accent); }.client-commerce-success strong { font-size: 14px; }.client-commerce-success p { max-width: 280px; color: var(--muted-text); font-size: 10px; line-height: 1.6; }
 .client-commerce-error { border-radius: 10px; background: rgba(185,35,35,.12); padding: 9px; color: #d85d5d; font-size: 10px; }
 .client-time-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; }.client-time-grid button { border: 1px solid color-mix(in srgb,var(--main-text) 14%,transparent); border-radius: 11px; padding: 9px 6px; font-size: 11px; font-weight: 700; background: color-mix(in srgb,var(--button-bg) 84%,transparent); color: var(--button-text); }.client-time-grid button.active { border-color: var(--accent); background: var(--accent); color: var(--button-text); }

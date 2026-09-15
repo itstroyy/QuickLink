@@ -11,6 +11,7 @@ import { normalizeContactLink, slugify, standardLinks } from '@/lib/links'
 import { themeBackgrounds, themeNames, themePresets } from '@/lib/themes'
 import { EditorSaveProvider } from '@/components/editor-save-context'
 import type { Business, BusinessLink, BusinessTheme } from '@/lib/types'
+import { mutationErrorMessage, reportClientMutationError } from '@/lib/client-errors'
 
 type DraftLink = Pick<BusinessLink, 'type' | 'label' | 'url' | 'icon' | 'enabled'>
 
@@ -117,7 +118,8 @@ export default function ClientForm({ initialBusiness, initialLinks = [], duplica
       router.refresh()
     } catch (caught) {
       const message = caught instanceof Error ? caught.message : 'Unable to save this client.'
-      setError(message.includes('businesses_slug_key') ? 'That slug is already being used.' : message)
+      reportClientMutationError('admin.business.save', caught)
+      setError(message.includes('businesses_slug_key') ? 'That slug is already being used.' : mutationErrorMessage('save this business', caught))
       setSaving(false)
     }
   }

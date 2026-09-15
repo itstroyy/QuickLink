@@ -8,6 +8,7 @@ import { createClient } from '@/lib/supabase/client'
 import type { ActivityAppointment, ActivityBusiness, ActivityOrder, ActivityRequest } from '@/lib/activity-data'
 import type { AppointmentStatus, OrderStatus, ServiceRequest } from '@/lib/types'
 import { formatDate, formatDateTime as formatWhen, formatPhone, formatTime } from '@/lib/display-format'
+import ConfirmationDialog from '@/components/confirmation-dialog'
 
 type Activity = {
   ready: boolean
@@ -49,6 +50,7 @@ export default function ActivityManager({ activity }: { activity: Activity }) {
   const [requests, setRequests] = useState(activity.requests)
   const [message, setMessage] = useState('')
   const [busy, setBusy] = useState('')
+  const [pendingDelete, setPendingDelete] = useState<{key:TabKey;businessId:string;id:string}|null>(null)
   const supabase = createClient()
   const notify = useFeedback()
   const pending = useRef(false)
@@ -112,8 +114,10 @@ export default function ActivityManager({ activity }: { activity: Activity }) {
       if (key === 'requests') setRequests((rows) => rows.map((row) => row.id === id ? { ...row, archived } : row))
     })
   }
-  async function removeRow(key: TabKey, businessId: string, id: string) {
-    if (pending.current || !confirm('Permanently delete this record? This cannot be undone.')) return
+  function removeRow(key: TabKey, businessId: string, id: string) {
+    if (!pending.current) setPendingDelete({key,businessId,id})
+  }
+  async function performRemove(key: TabKey, businessId: string, id: string) {
     await runMutation(`delete-${id}`, 'Activity permanently deleted.', async () => {
       if (key === 'bookings') {
         const response = await fetch('/api/admin/appointments/delete', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ businessId, appointmentId: id }) })
@@ -127,6 +131,7 @@ export default function ActivityManager({ activity }: { activity: Activity }) {
       if (key === 'orders') setOrders((rows) => rows.filter((row) => row.id !== id))
       if (key === 'requests') setRequests((rows) => rows.filter((row) => row.id !== id))
     })
+    setPendingDelete(null)
   }
   if (!activity.ready) return <section className="rounded-2xl border border-amber-200 bg-amber-50 p-6"><h2 className="font-semibold text-amber-900">Database setup required</h2><p className="mt-2 text-sm text-amber-800">Run the Quicklink migrations in Supabase, then refresh.</p></section>
 
@@ -172,6 +177,7 @@ export default function ActivityManager({ activity }: { activity: Activity }) {
       </div>
     </div>
     {activeList.length > HISTORY_PAGE_SIZE && <button type="button" className="inline-flex min-h-10 items-center justify-center gap-2 rounded-xl border border-[#d8d6ce] bg-white px-4 text-sm font-semibold" onClick={() => setExpanded((v) => !v)}>{expanded ? 'Show less' : `View all (${activeList.length})`}</button>}
+    <ConfirmationDialog open={Boolean(pendingDelete)} title="Permanently delete activity?" body="This record will be permanently removed. This action cannot be undone." confirmLabel="Delete permanently" busy={Boolean(busy)} onCancel={()=>setPendingDelete(null)} onConfirm={()=>{ if (pendingDelete) return performRemove(pendingDelete.key,pendingDelete.businessId,pendingDelete.id) }}/>
   </div>
 }
 

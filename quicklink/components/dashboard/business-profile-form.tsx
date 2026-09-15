@@ -5,6 +5,7 @@ import { ImagePlus, Loader2, Save } from 'lucide-react'
 import { useFeedback } from '@/components/feedback-provider'
 import { createClient } from '@/lib/supabase/client'
 import type { Business, BusinessTheme } from '@/lib/types'
+import { mutationErrorMessage, reportClientMutationError } from '@/lib/client-errors'
 
 const themes: BusinessTheme[] = ['minimal', 'luxury', 'dark', 'beauty', 'automotive']
 
@@ -28,7 +29,7 @@ export default function BusinessProfileForm({ business: initial }: { business: B
       const { error } = await supabase.from('businesses').update(editable).eq('id', id)
       if (error) throw error
       notify('Business profile saved.')
-    } catch { notify('Could not save your profile. Please try again.', 'error') }
+    } catch (error) { reportClientMutationError('save business profile', error); notify(mutationErrorMessage('save your profile', error), 'error') }
     finally { setSaving(false) }
   }
 
@@ -46,7 +47,7 @@ export default function BusinessProfileForm({ business: initial }: { business: B
       if (error) throw error
       set(field, url)
       notify(`${kind === 'logo' ? 'Logo' : 'Cover image'} updated.`)
-    } catch { notify('Could not upload this image. Please try again.', 'error') }
+    } catch (error) { reportClientMutationError(`upload business ${kind}`, error); notify(mutationErrorMessage('upload this image', error), 'error') }
     finally { setUploading('') }
   }
 

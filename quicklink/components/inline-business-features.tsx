@@ -7,7 +7,10 @@ import { ArrowUpRight, Calendar, Check as CheckIcon, Copy, Loader2, MessageSquar
 import CommerceManager from '@/components/commerce-manager'
 import { useEditorSave } from '@/components/editor-save-context'
 import { createClient } from '@/lib/supabase/client'
-import type { Appointment, BookingSettings, BusinessClientAccess, BusinessFeature, CustomerOrder, NotificationSettings, Product, RequestServiceSettings, Service, ServiceRequest } from '@/lib/types'
+import type { Appointment, BookingSettings, BusinessClientAccess, BusinessFeature, CustomerOrder, NotificationSettings, OrderCustomerSettings, Product, RequestServiceSettings, Service, ServiceRequest } from '@/lib/types'
+import ConfirmationDialog from '@/components/confirmation-dialog'
+import { mutationErrorMessage, reportClientMutationError } from '@/lib/client-errors'
+import { orderCustomerSettings } from '@/lib/order-settings'
 
 const modules = [
   { key: 'ordering', label: 'Order Now', description: 'Customers select products, quantities and fulfillment details.', icon: ShoppingBag },
@@ -47,6 +50,7 @@ function bookingSettings(feature?: BusinessFeature): BookingSettings {
 export default function InlineBusinessFeatures({ businessId, businessSlug, data, initialClientAccess }: { businessId: string; businessSlug: string; data: InlineCommerceData; initialClientAccess: BusinessClientAccess }) {
   const notify = useFeedback()
   const [features, setFeatures] = useState(data.features)
+  const [orderConfig, setOrderConfig] = useState(() => orderCustomerSettings(data.features.find((feature) => feature.feature_key === 'ordering')?.settings))
   const [requestConfig, setRequestConfig] = useState(() => requestSettings(data.features.find((feature) => feature.feature_key === 'request_service')))
   const [bookingConfig, setBookingConfig] = useState(() => bookingSettings(data.features.find((feature) => feature.feature_key === 'booking')))
   const [notifications, setNotifications] = useState<NotificationSettings>(data.notifications)
@@ -55,6 +59,7 @@ export default function InlineBusinessFeatures({ businessId, businessSlug, data,
   const [saveBusy, setSaveBusy] = useState(false)
   const [copied, setCopied] = useState(false)
   const [message, setMessage] = useState('')
+  const [confirmRegenerate, setConfirmRegenerate] = useState(false)
   const supabase = createClient()
   const enabled = (key: string) => features.some((feature) => feature.feature_key === key && feature.enabled)
 
@@ -77,7 +82,7 @@ export default function InlineBusinessFeatures({ businessId, businessSlug, data,
           enabled: current?.enabled ?? false,
           is_primary: current?.is_primary ?? false,
           display_order: current?.display_order ?? index,
-          settings: module.key === 'request_service' ? requestConfig : module.key === 'booking' ? bookingConfig : current?.settings ?? {},
+          settings: module.key === 'ordering' ? orderConfig : module.key === 'request_service' ? requestConfig : module.key === 'booking' ? bookingConfig : current?.settings ?? {},
         }
       })
     const clientAccessPayload: Partial<BusinessClientAccess> & { business_id: string } = {
@@ -89,7 +94,11 @@ export default function InlineBusinessFeatures({ businessId, businessSlug, data,
 
     if (featurePayloads.some((feature) => feature.is_primary)) {
       const { error } = await supabase.from('business_features').update({ is_primary: false }).eq('business_id', businessId)
-      if (error) { setSaveBusy(false); setMessage(error.message); throw new Error(error.message) }
+      if (error) {
+        const safe = mutationErrorMessage('save business features', error)
+        reportClientMutationError('business_features.clear_primary', error)
+        setSaveBusy(false); setMessage(safe); throw new Error(safe)
+      }
     }
 
     const [featuresResult, notificationsResult, accessResult] = await Promise.all([
@@ -99,7 +108,11 @@ export default function InlineBusinessFeatures({ businessId, businessSlug, data,
     ])
     setSaveBusy(false)
     const error = featuresResult.error || notificationsResult.error || accessResult.error
-    if (error) { setMessage(error.message); throw new Error(error.message) }
+    if (error) {
+      const safe = mutationErrorMessage('save business features', error)
+      reportClientMutationError('business_features.save_bundle', error)
+      setMessage(safe); throw new Error(safe)
+    }
     if (featuresResult.data) setFeatures(featuresResult.data as BusinessFeature[])
     if (notificationsResult.data) setNotifications(notificationsResult.data as NotificationSettings)
     if (accessResult.data) setClientAccess(accessResult.data as BusinessClientAccess)
@@ -110,14 +123,17 @@ export default function InlineBusinessFeatures({ businessId, businessSlug, data,
   const hasParentSave = useEditorSave(saveChanges)
 
   async function regenerateToken() {
-    if (!confirm('Regenerate the private activity link? The previous link will stop working immediately.')) return
     setClientAccessBusy(true); setMessage('')
     const bytes = crypto.getRandomValues(new Uint8Array(24))
     const activity_access_token = Array.from(bytes).map((b) => b.toString(16).padStart(2, '0')).join('')
     const { data: saved, error } = await supabase.from('business_client_access').upsert({ business_id: businessId, client_activity_enabled: clientAccess.client_activity_enabled, client_activity_show_orders: clientAccess.client_activity_show_orders, client_activity_show_bookings: clientAccess.client_activity_show_bookings, client_activity_show_service_requests: clientAccess.client_activity_show_service_requests, activity_access_token }, { onConflict: 'business_id' }).select().single()
     setClientAccessBusy(false)
-    if (error) { setMessage(error.message); return }
+    if (error) {
+      reportClientMutationError('business_client_access.regenerate', error)
+      setMessage(mutationErrorMessage('regenerate the private activity link', error)); setConfirmRegenerate(false); return
+    }
     setClientAccess(saved as BusinessClientAccess)
+    setConfirmRegenerate(false)
   }
 
   function copyLink() {
@@ -142,10 +158,30 @@ export default function InlineBusinessFeatures({ businessId, businessSlug, data,
       ...current, [key]: value,
       ...(key === 'address_required' && value ? { show_address: true } : {}),
       ...(key === 'email_required' && value ? { show_email: true } : {}),
+      ...(key === 'show_address' && !value ? { address_required: false } : {}),
+      ...(key === 'show_email' && !value ? { email_required: false } : {}),
+    }))
+  }
+  function orderSetting<K extends keyof OrderCustomerSettings>(key: K, value: OrderCustomerSettings[K]) {
+    setOrderConfig((current) => ({
+      ...current, [key]: value,
+      ...(key === 'address_required' && value ? { show_address: true } : {}),
+      ...(key === 'email_required' && value ? { show_email: true } : {}),
+      ...(key === 'show_address' && !value ? { address_required: false } : {}),
+      ...(key === 'show_email' && !value ? { email_required: false } : {}),
     }))
   }
   function bookingSetting<K extends keyof BookingSettings>(key: K, value: BookingSettings[K]) {
     setBookingConfig((current) => ({ ...current, [key]: value }))
+  }
+  function applyPreset(mode:'retail'|'appointment'|'service'|'hybrid') {
+    const enabledKeys=mode==='retail'?['ordering']:mode==='appointment'?['booking']:mode==='service'?['request_service']:['ordering','booking','request_service']
+    const primaryKey=mode==='retail'?'ordering':mode==='appointment'?'booking':'request_service'
+    setFeatures(modules.map((module,index)=>{
+      const current=features.find((feature)=>feature.feature_key===module.key)
+      return current?{...current,enabled:enabledKeys.includes(module.key),is_primary:module.key===primaryKey}:{id:`draft-${module.key}`,business_id:businessId,feature_key:module.key,enabled:enabledKeys.includes(module.key),is_primary:module.key===primaryKey,display_order:index,settings:{}}
+    }))
+    notify(`${mode[0].toUpperCase()+mode.slice(1)} preset staged. Save changes to publish it.`)
   }
 
   return <div className="grid gap-6">
@@ -153,7 +189,22 @@ export default function InlineBusinessFeatures({ businessId, businessSlug, data,
       <div className="mb-5 flex flex-wrap items-start justify-between gap-3"><div><p className="text-xs font-semibold uppercase tracking-[.18em] text-[#8b6b3d]">Business Features</p><h2 className="mt-2 text-xl font-semibold">Choose what customers can do</h2><p className="mt-1 text-sm text-[#77776f]">Only enabled features appear on the public business page.</p></div><Link href={`/admin/activity?business=${businessId}`} className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border border-[#d8d6ce] bg-white px-3.5 py-2 text-xs font-semibold text-[#1d1d1b]">Orders, bookings &amp; requests <ArrowUpRight size={14}/></Link></div>
       {!data.ready && <p className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">Database setup required: run <code>202609130003_request_service.sql</code>, then refresh.</p>}
       {message && <p role="status" className={`mb-4 rounded-xl px-4 py-3 text-sm ${message.includes('saved') ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'}`}>{message}</p>}
+      <div className="mb-5 rounded-2xl border border-[#e5e0d7] bg-[#faf9f5] p-4"><p className="text-xs font-semibold uppercase tracking-[.1em] text-[#77776f]">Quick presets</p><p className="mt-1 text-xs text-[#77776f]">Use a sensible starting mode, then adjust any feature individually.</p><div className="mt-3 flex flex-wrap gap-2">{([['retail','Retail / product'],['appointment','Appointment'],['service','Service / quote'],['hybrid','Hybrid']] as const).map(([value,label])=><button type="button" key={value} onClick={()=>applyPreset(value)} className="min-h-10 rounded-full border border-[#d8d6ce] bg-white px-4 text-xs font-semibold">{label}</button>)}</div></div>
       <div className="grid gap-3 md:grid-cols-2">{modules.map(({ key, label, description, icon: Icon }) => { const value=features.find((feature)=>feature.feature_key===key); const disabled = !data.ready || (key === 'booking' && !data.bookingReady); return <article key={key} className={`rounded-2xl border p-4 transition ${value?.enabled?'border-[#b78358] bg-[#fbf5ed] shadow-sm':'border-[#e1dfd7] bg-[#fafaf7]'} ${disabled?'opacity-70':''}`}><div className="flex items-start justify-between gap-3"><span className="grid size-10 place-items-center rounded-xl bg-[#1d1d1b] text-[#d19a6a]"><Icon size={18}/></span><label className="relative inline-flex cursor-pointer items-center"><input disabled={disabled} type="checkbox" className="peer sr-only" aria-label={`Enable ${label}`} checked={value?.enabled??false} onChange={(event)=>updateFeature(key,{enabled:event.target.checked})}/><span className="h-6 w-11 rounded-full bg-[#d3d1ca] transition after:absolute after:left-1 after:top-1 after:size-4 after:rounded-full after:bg-white after:transition peer-checked:bg-[#1d1d1b] peer-checked:after:translate-x-5"/></label></div><h3 className="mt-4 font-semibold">{label}</h3><p className="mt-1 min-h-10 text-xs leading-5 text-[#77776f]">{description}</p>{key === 'booking' && !data.bookingReady && <p className="mt-2 text-[11px] font-medium text-amber-700">Run the booking migration first.</p>}<label className="mt-4 flex items-center gap-2 border-t border-[#e2ded5] pt-3 text-xs font-medium text-[#77776f]"><input disabled={disabled} type="radio" name={`primary-${businessId}`} checked={value?.is_primary??false} onChange={()=>updateFeature(key,{enabled:true,is_primary:true})} className="accent-[#1d1d1b]"/> Primary action</label></article>})}</div>
+
+      {enabled('ordering') && <div className="mt-5 rounded-2xl border border-[#dedbd2] bg-[#faf9f5] p-4 sm:p-5">
+        <div className="mb-4"><h3 className="font-semibold">Order Now customer information</h3><p className="mt-1 text-xs text-[#77776f]">Choose which details Quicklink collects before checkout. Name is always required.</p></div>
+        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+          <FixedField label="Name · required"/>
+          <Check label="Phone required" checked={orderConfig.phone_required} onChange={(value)=>orderSetting('phone_required',value)}/>
+          <Check label="Show email" checked={orderConfig.show_email} onChange={(value)=>orderSetting('show_email',value)}/>
+          <Check label="Email required" checked={orderConfig.email_required} onChange={(value)=>orderSetting('email_required',value)}/>
+          <Check label="Show address" checked={orderConfig.show_address} onChange={(value)=>orderSetting('show_address',value)}/>
+          <Check label="Address required" checked={orderConfig.address_required} onChange={(value)=>orderSetting('address_required',value)}/>
+          <Check label="Show notes" checked={orderConfig.show_notes} onChange={(value)=>orderSetting('show_notes',value)}/>
+        </div>
+        <p className="mt-3 text-xs text-[#77776f]">Paid online orders always require a valid email, even when optional for Pay Later. Address is requested for delivery and can also be shown for pickup.</p>
+      </div>}
 
       {enabled('request_service') && <div className="mt-5 rounded-2xl border border-[#dedbd2] bg-[#faf9f5] p-4 sm:p-5">
         <div className="mb-4"><h3 className="font-semibold">Request Service settings</h3><p className="mt-1 text-xs text-[#77776f]">Rename and shape this form for any kind of business request.</p></div>
@@ -202,7 +253,7 @@ export default function InlineBusinessFeatures({ businessId, businessSlug, data,
         {clientAccess.activity_access_token && <div className="mt-4 flex flex-wrap items-center gap-2">
           <input readOnly value={clientActivityLink} className="form-control min-w-0 flex-1" onFocus={(event) => event.target.select()}/>
           <button type="button" onClick={copyLink} disabled={!clientActivityLink} className="inline-flex min-h-10 items-center justify-center gap-2 rounded-xl border border-[#d8d6ce] bg-white px-4 text-sm font-semibold disabled:opacity-50">{copied ? <CheckIcon size={15}/> : <Copy size={15}/>} {copied ? 'Copied' : 'Copy link'}</button>
-          <button type="button" onClick={regenerateToken} disabled={clientAccessBusy} className="inline-flex min-h-10 items-center justify-center gap-2 rounded-xl border border-[#d8d6ce] bg-white px-4 text-sm font-semibold disabled:opacity-50"><RefreshCw size={15}/> Regenerate link</button>
+          <button type="button" onClick={()=>setConfirmRegenerate(true)} disabled={clientAccessBusy} className="inline-flex min-h-10 items-center justify-center gap-2 rounded-xl border border-[#d8d6ce] bg-white px-4 text-sm font-semibold disabled:opacity-50"><RefreshCw size={15}/> Regenerate link</button>
         </div>}
         {!clientAccess.activity_access_token && <p className="mt-3 text-xs text-[#77776f]">Select Save changes below to enable this and generate the private link.</p>}
         <p className="mt-2 text-xs text-[#77776f]">Regenerating invalidates the previous link immediately. This business can search, filter, view details, change status, and archive/restore — never permanently delete, edit configuration, or see other businesses.</p>
@@ -212,6 +263,7 @@ export default function InlineBusinessFeatures({ businessId, businessSlug, data,
     {!hasParentSave && <div className="sticky bottom-4 z-10 flex justify-end">
       <button type="button" onClick={() => void saveChanges().catch(() => {})} disabled={saveBusy} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-[#1d1d1b] px-6 text-sm font-semibold text-white shadow-lg disabled:opacity-50">{saveBusy ? <Loader2 className="animate-spin" size={16}/> : <Save size={16}/>} Save changes</button>
     </div>}
+    <ConfirmationDialog open={confirmRegenerate} title="Regenerate private link?" body="The previous private activity link will stop working immediately. Anyone using it will need the new link." confirmLabel="Regenerate link" busy={clientAccessBusy} onCancel={()=>setConfirmRegenerate(false)} onConfirm={regenerateToken}/>
   </div>
 }
 

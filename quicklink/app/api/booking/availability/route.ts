@@ -9,7 +9,7 @@ export async function GET(request: Request) {
     const url = new URL(request.url)
     const businessId = url.searchParams.get('businessId')
     const date = url.searchParams.get('date')
-    const serviceId = url.searchParams.get('serviceId')
+    const serviceIds = (url.searchParams.get('serviceIds') || url.searchParams.get('serviceId') || '').split(',').filter(Boolean).slice(0, 12)
     if (!businessId || !date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) return NextResponse.json({ error: 'Missing or invalid date' }, { status: 400 })
 
     const supabase = await createClient()
@@ -18,15 +18,17 @@ export async function GET(request: Request) {
       supabase.from('business_features').select('settings,enabled').eq('business_id', businessId).eq('feature_key', 'booking').maybeSingle(),
       supabase.from('business_hours').select('*').eq('business_id', businessId).eq('day_of_week', dayOfWeek).maybeSingle(),
       supabase.rpc('quicklink_booked_ranges', { p_business_id: businessId, p_date: date }),
-      serviceId ? supabase.from('services').select('*').eq('id', serviceId).eq('business_id', businessId).eq('enabled', true).eq('bookable', true).maybeSingle() : Promise.resolve({ data: null, error: null }),
+      serviceIds.length ? supabase.from('services').select('*').in('id', serviceIds).eq('business_id', businessId).eq('enabled', true).eq('bookable', true).eq('action_type', 'bookable') : Promise.resolve({ data: [], error: null }),
       getCalendarProvider(businessId),
     ])
     if (!featureResult.data?.enabled) return NextResponse.json({ error: 'Booking is not available' }, { status: 400 })
     if (bookedResult.error) { console.error('[Quicklink booking] availability lookup failed', bookedResult.error); return NextResponse.json({ error: 'Unable to load availability' }, { status: 500 }) }
 
     const settings = (featureResult.data.settings || {}) as Partial<BookingSettings>
-    const service = serviceResult.data as Service | null
-    if (serviceId && !service) return NextResponse.json({ error: 'That service is not available for booking' }, { status: 400 })
+    const services = (serviceResult.data || []) as Service[]
+    if (serviceIds.length && services.length !== serviceIds.length) return NextResponse.json({ error: 'One or more services are not available for booking' }, { status: 400 })
+    const allowMultiple = Boolean((await supabase.rpc('get_public_payment_config', { p_business_id: businessId })).data?.[0]?.allow_multiple_services)
+    if (serviceIds.length > 1 && !allowMultiple) return NextResponse.json({ error: 'This business accepts one service per booking' }, { status: 400 })
     const bookedRanges = [...(bookedResult.data || [])]
 
     // If a calendar is connected, its busy events also block times — but a
@@ -48,7 +50,7 @@ export async function GET(request: Request) {
     const slots = computeAvailableSlots({
       date,
       hour: (hoursResult.data || undefined) as BusinessHour | undefined,
-      durationMinutes: service?.duration_minutes || 30,
+      durationMinutes: services.length ? services.reduce((sum, service) => sum + (service.duration_minutes || 30), 0) : 30,
       bufferMinutes: settings.buffer_minutes ?? 0,
       minimumNoticeMinutes: settings.minimum_notice_minutes ?? 0,
       bookedRanges,

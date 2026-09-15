@@ -54,29 +54,28 @@ export default async function DashboardHomePage({ searchParams }: { searchParams
   // Show a stat/quick action when it fits the business type OR the owner has
   // explicitly turned that feature on — never hide something they enabled,
   // but don't clutter a retail dashboard with booking modules it never uses.
-  const orderingRelevant = ['retail', 'food'].includes(industry) || enabledFeatures.has('ordering')
-  const bookingRelevant = ['barber', 'beauty'].includes(industry) || enabledFeatures.has('booking')
-  const requestRelevant = ['detailing', 'repair', 'cleaning'].includes(industry) || enabledFeatures.has('request_service')
+  const orderingRelevant = enabledFeatures.has('ordering')
+  const bookingRelevant = enabledFeatures.has('booking')
+  const requestRelevant = enabledFeatures.has('request_service')
 
   const stats: Array<{ icon: typeof ShoppingBag; label: string; value: number }> = []
   if (orderingRelevant) stats.push({ icon: ShoppingBag, label: 'New orders', value: newOrders.length })
   if (requestRelevant) stats.push({ icon: ClipboardList, label: 'New requests', value: requestsToday.count ?? 0 })
   if (bookingRelevant) stats.push({ icon: CalendarClock, label: "Today's bookings", value: bookingsToday.count ?? 0 })
-  if (stats.length === 0) stats.push({ icon: ShoppingBag, label: 'New orders', value: newOrders.length }, { icon: ClipboardList, label: 'New requests', value: requestsToday.count ?? 0 }, { icon: CalendarClock, label: "Today's bookings", value: bookingsToday.count ?? 0 })
   const statsGridClass = stats.length === 1 ? 'sm:grid-cols-1' : stats.length === 2 ? 'sm:grid-cols-2' : 'sm:grid-cols-3'
 
   const quickActions: Array<{ href: string; icon: typeof Plus; label: string }> = []
   if (orderingRelevant) quickActions.push({ href: withBusiness('/dashboard/catalog#products', business.id, showParam), icon: Plus, label: 'Add product' })
-  if (bookingRelevant) { quickActions.push({ href: withBusiness('/dashboard/catalog#services', business.id, showParam), icon: Plus, label: 'Add service' }); quickActions.push({ href: withBusiness('/dashboard/catalog#hours', business.id, showParam), icon: CalendarClock, label: 'Manage availability' }) }
+  if (bookingRelevant) { quickActions.push({ href: withBusiness('/dashboard/catalog#services', business.id, showParam), icon: Plus, label: 'Add service' }); quickActions.push({ href: withBusiness('/dashboard/integrations', business.id, showParam), icon: CalendarClock, label: 'Manage availability' }) }
   if (requestRelevant) quickActions.push({ href: withBusiness('/dashboard/catalog#services', business.id, showParam), icon: Plus, label: 'Add service/package' })
   if (!orderingRelevant && !bookingRelevant && !requestRelevant) quickActions.push({ href: withBusiness('/dashboard/catalog#products', business.id, showParam), icon: Plus, label: 'Add product' }, { href: withBusiness('/dashboard/catalog#services', business.id, showParam), icon: Plus, label: 'Add service' })
   quickActions.push({ href: withBusiness('/dashboard/catalog#offers', business.id, showParam), icon: Tag, label: 'Create offer' })
-  if (!bookingRelevant) quickActions.push({ href: withBusiness('/dashboard/catalog#hours', business.id, showParam), icon: CalendarClock, label: 'Edit hours' })
+  if (!bookingRelevant) quickActions.push({ href: withBusiness('/dashboard/integrations', business.id, showParam), icon: CalendarClock, label: 'Edit hours' })
 
   const setupItems = [
     { done: Boolean(business.logo_url), label: 'Add your logo', href: withBusiness('/dashboard/more', business.id, showParam) },
     { done: hasCatalog, label: 'Add a product or service', href: withBusiness('/dashboard/catalog', business.id, showParam) },
-    { done: hasHours, label: 'Set your hours', href: withBusiness('/dashboard/catalog#hours', business.id, showParam) },
+    { done: hasHours, label: 'Set your hours', href: withBusiness('/dashboard/integrations', business.id, showParam) },
     { done: hasAction, label: 'Turn on ordering, booking or requests', href: withBusiness('/dashboard/catalog', business.id, showParam) },
     { done: Boolean(industry) && industry !== 'general', label: 'Confirm your business type', href: withBusiness('/dashboard/settings', business.id, showParam) },
     { done: hasReviewLink, label: 'Add your Google review link', href: withBusiness('/dashboard/settings', business.id, showParam) },
@@ -84,9 +83,9 @@ export default async function DashboardHomePage({ searchParams }: { searchParams
   const remainingSetup = setupItems.filter((item) => !item.done)
 
   const activity: ActivityRow[] = [
-    ...(recentOrders.data || []).map((r) => ({ id: r.id, kind: 'order' as const, title: r.customer_name || 'Customer', status: r.status, created_at: r.created_at })),
-    ...(recentBookings.data || []).map((r) => ({ id: r.id, kind: 'booking' as const, title: r.customer_name || 'Customer', status: r.status, created_at: r.created_at })),
-    ...(recentRequests.data || []).map((r) => ({ id: r.id, kind: 'request' as const, title: r.customer_name || 'Customer', status: r.status, created_at: r.created_at })),
+    ...(orderingRelevant ? recentOrders.data || [] : []).map((r) => ({ id: r.id, kind: 'order' as const, title: r.customer_name || 'Customer', status: r.status, created_at: r.created_at })),
+    ...(bookingRelevant ? recentBookings.data || [] : []).map((r) => ({ id: r.id, kind: 'booking' as const, title: r.customer_name || 'Customer', status: r.status, created_at: r.created_at })),
+    ...(requestRelevant ? recentRequests.data || [] : []).map((r) => ({ id: r.id, kind: 'request' as const, title: r.customer_name || 'Customer', status: r.status, created_at: r.created_at })),
   ].sort((a, b) => b.created_at.localeCompare(a.created_at)).slice(0, 5)
 
   return <main className="px-5 py-8 lg:px-10 lg:py-10"><div className="mx-auto max-w-4xl">
@@ -96,9 +95,9 @@ export default async function DashboardHomePage({ searchParams }: { searchParams
     {isBrandNew && <Link href={withBusiness('/dashboard/onboarding', business.id, showParam)} className="mt-4 flex items-center gap-2 rounded-full bg-[#1d1d1b] px-5 py-3 text-sm font-semibold text-white sm:w-fit">Start guided setup <ArrowRight size={16}/></Link>}
 
     {!isBrandNew && <>
-      <div className={`mt-7 grid gap-3 ${statsGridClass}`}>
+      {stats.length>0&&<div className={`mt-7 grid gap-3 ${statsGridClass}`}>
         {stats.map((stat) => <Stat key={stat.label} icon={stat.icon} label={stat.label} value={stat.value}/>)}
-      </div>
+      </div>}
       {orderValueCents > 0 && orderingRelevant && <p className="mt-3 text-sm text-[#77776f]">Today&apos;s order value so far: <strong className="text-[#1d1d1b]">${(orderValueCents / 100).toFixed(2)}</strong></p>}
     </>}
 

@@ -7,6 +7,7 @@ import {
 } from 'lucide-react'
 import { useFeedback } from '@/components/feedback-provider'
 import { createClient } from '@/lib/supabase/client'
+import { mutationErrorMessage, reportClientMutationError } from '@/lib/client-errors'
 import type { Business, BusinessLink, BusinessPreferences } from '@/lib/types'
 import {
   computeEnabledSections, industryDefaultSectionOrder, industryOptions, productsSectionTitleFor, resolvePrimaryAction,
@@ -57,13 +58,15 @@ export default function PreferencesEditor({ business, initialPreferences, links,
   const [serviceArea, setServiceArea] = useState(initialPreferences.service_area || '')
   const [fulfillmentText, setFulfillmentText] = useState(initialPreferences.fulfillment_text || '')
   const [productsSectionTitle, setProductsSectionTitle] = useState(initialPreferences.products_section_title || '')
+  const [showPublicHours, setShowPublicHours] = useState(initialPreferences.show_public_hours)
+  const [showOpenStatus, setShowOpenStatus] = useState(initialPreferences.show_open_status)
   const [address, setAddress] = useState(business.address || '')
   const [reviewUrl, setReviewUrl] = useState(existingReviewLink?.url || '')
   const [sectionOrder, setSectionOrder] = useState<PublicSectionKey[]>(
     (initialPreferences.section_order.length ? initialPreferences.section_order : industryDefaultSectionOrder[initialPreferences.industry]) as PublicSectionKey[],
   )
   const [saving, setSaving] = useState(false)
-  const [savedSnapshot, setSavedSnapshot] = useState(() => JSON.stringify({ industry, primaryAction, timezone, serviceArea, fulfillmentText, productsSectionTitle, address, reviewUrl, sectionOrder }))
+  const [savedSnapshot, setSavedSnapshot] = useState(() => JSON.stringify({ industry, primaryAction, timezone, serviceArea, fulfillmentText, productsSectionTitle, showPublicHours, showOpenStatus, address, reviewUrl, sectionOrder }))
   const prevIndustryRef = useRef(initialPreferences.industry)
 
   const enabledSections = useMemo(() => computeEnabledSections({
@@ -75,17 +78,17 @@ export default function PreferencesEditor({ business, initialPreferences, links,
     hasBooking: availability.hasBooking,
     hasRequest: availability.hasRequest,
     hasGallery: availability.hasGallery,
-    hasHours: availability.hasHours,
+    hasHours: availability.hasHours && showPublicHours,
     hasReviewLink: reviewUrl.trim().length > 0,
     hasContactInfo: Boolean(address.trim() || business.phone || business.email || serviceArea.trim() || fulfillmentText.trim()),
     hasSecondaryLinks: secondaryLinksCount > 0,
     hasLeadForm: availability.hasLeadForm,
-  }), [availability, reviewUrl, address, business.phone, business.email, serviceArea, fulfillmentText, secondaryLinksCount])
+  }), [availability, showPublicHours, reviewUrl, address, business.phone, business.email, serviceArea, fulfillmentText, secondaryLinksCount])
 
   const visibleOrder = useMemo(() => resolveSectionOrder({ savedOrder: sectionOrder, industry, enabledSections }), [sectionOrder, industry, enabledSections])
   const hiddenSections = useMemo(() => (Object.keys(sectionMeta) as PublicSectionKey[]).filter((key) => !enabledSections.has(key)), [enabledSections])
 
-  const currentSnapshot = JSON.stringify({ industry, primaryAction, timezone, serviceArea, fulfillmentText, productsSectionTitle, address, reviewUrl, sectionOrder })
+  const currentSnapshot = JSON.stringify({ industry, primaryAction, timezone, serviceArea, fulfillmentText, productsSectionTitle, showPublicHours, showOpenStatus, address, reviewUrl, sectionOrder })
   const dirty = currentSnapshot !== savedSnapshot
 
   useEffect(() => {
@@ -153,6 +156,8 @@ export default function PreferencesEditor({ business, initialPreferences, links,
         service_area: serviceArea.trim() || null,
         fulfillment_text: fulfillmentText.trim() || null,
         products_section_title: productsSectionTitle.trim() || null,
+        show_public_hours: showPublicHours,
+        show_open_status: showOpenStatus,
       })
       if (prefsError) throw prefsError
 
@@ -178,7 +183,10 @@ export default function PreferencesEditor({ business, initialPreferences, links,
 
       setSavedSnapshot(currentSnapshot)
       notify('Page settings saved.')
-    } catch { notify('Could not save your page settings. Please try again.', 'error') }
+    } catch (error) {
+      reportClientMutationError('save page settings', error)
+      notify(mutationErrorMessage('save your page settings', error), 'error')
+    }
     finally { setSaving(false) }
   }
 
@@ -247,6 +255,11 @@ export default function PreferencesEditor({ business, initialPreferences, links,
             {timezoneOptions.map((tz) => <option key={tz.value} value={tz.value}>{tz.label}</option>)}
           </select>
         </label>
+        <div className="mt-4 grid gap-2 rounded-xl border border-[#e4e2d8] bg-[#fafaf7] p-4">
+          <label className="flex items-center justify-between gap-4 text-sm font-medium"><span>Show business hours publicly</span><input type="checkbox" checked={showPublicHours} onChange={(event) => setShowPublicHours(event.target.checked)} /></label>
+          <label className="flex items-center justify-between gap-4 text-sm font-medium"><span>Show open / closed status</span><input type="checkbox" checked={showOpenStatus} onChange={(event) => setShowOpenStatus(event.target.checked)} /></label>
+          <p className="text-xs text-[#77776f]">The live status uses this timezone. You can hide either signal without deleting the saved schedule.</p>
+        </div>
       </section>
 
       <section className="rounded-2xl border border-[#deded7] bg-white p-5 sm:p-6">

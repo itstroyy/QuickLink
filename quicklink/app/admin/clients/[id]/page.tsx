@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
-import { BarChart3, BellRing, CalendarCheck2, CheckCircle2, Circle, Grid2X2, Inbox, Link2, MousePointerClick, ShieldCheck } from 'lucide-react'
+import { BarChart3, BellRing, CalendarCheck2, CheckCircle2, Circle, CreditCard, Grid2X2, Inbox, Link2, MousePointerClick, ShieldCheck } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import ClientActions from '@/components/client-actions'
@@ -12,7 +12,7 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
   const supabase = await createClient()
   const [
     { data: business }, { data: links }, views, clicks, events, features, notifications, access,
-    productsCount, servicesCount, hoursCount,
+    productsCount, servicesCount, hoursCount, paymentSettings,
     recentOrders, recentBookings, recentRequests,
   ] = await Promise.all([
     supabase.from('businesses').select('*').eq('id', id).single(),
@@ -26,6 +26,7 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
     supabase.from('products').select('id', { count: 'exact', head: true }).eq('business_id', id),
     supabase.from('services').select('id', { count: 'exact', head: true }).eq('business_id', id),
     supabase.from('business_hours').select('id', { count: 'exact', head: true }).eq('business_id', id),
+    supabase.from('business_payment_settings').select('stripe_account_status,stripe_charges_enabled,stripe_payouts_enabled,order_payment_mode,booking_payment_mode').eq('business_id',id).maybeSingle(),
     supabase.from('orders').select('id,customer_name,status,created_at').eq('business_id', id).order('created_at', { ascending: false }).limit(5),
     supabase.from('appointments').select('id,customer_name,status,created_at').eq('business_id', id).order('created_at', { ascending: false }).limit(5),
     supabase.from('service_requests').select('id,customer_name,status,created_at').eq('business_id', id).order('created_at', { ascending: false }).limit(5),
@@ -49,6 +50,7 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
   const pushEnabled = notifications.data?.push_notifications_enabled !== false
   const emailEnabled = Boolean(notifications.data?.email_notifications_enabled && notifications.data?.notification_email)
   const calendarEnabled = Boolean(notifications.data?.calendar_integration_enabled && calendarConnection.data)
+  const paymentsEnabled=Boolean(paymentSettings.data?.stripe_charges_enabled&&paymentSettings.data?.stripe_payouts_enabled)
 
   const hasCatalog = (productsCount.count || 0) > 0 || (servicesCount.count || 0) > 0
   const hasHours = (hoursCount.count || 0) > 0
@@ -71,7 +73,7 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
     <div className="flex flex-wrap items-end justify-between gap-5"><div className="flex items-center gap-4"><div className="flex size-16 items-center justify-center overflow-hidden rounded-2xl bg-[#e8dfd1] text-xl font-semibold text-[#8b6b3d]">{typedBusiness.logo_url ? <img src={typedBusiness.logo_url} alt="" className="h-full w-full object-cover"/> : typedBusiness.name.slice(0, 2).toUpperCase()}</div><div><p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#8b6b3d]">{typedBusiness.category || 'Client page'}</p><h1 className="mt-1 text-3xl font-semibold tracking-tight">{typedBusiness.name}</h1><p className="mt-1 text-sm text-[#77776f]">/{typedBusiness.slug} · <span className="capitalize">{typedBusiness.theme}</span></p></div></div><ClientActions business={typedBusiness}/></div>
     <div className="mt-8 grid gap-4 sm:grid-cols-3"><Stat icon={BarChart3} label="Page views" value={views.count ?? 0}/><Stat icon={MousePointerClick} label="Link clicks" value={clicks.count ?? 0}/><Stat icon={Link2} label="Most clicked" value={mostClicked}/></div>
     <div className="mt-8 grid gap-6 lg:grid-cols-[1fr_340px]"><section className="overflow-hidden rounded-2xl border border-[#deded7] bg-white"><div className="border-b px-5 py-4"><h2 className="font-semibold">Page links</h2><p className="mt-1 text-xs text-[#999991]">Shown in this order on the public page.</p></div><div className="divide-y">{typedLinks.map((link) => <div key={link.id} className="flex items-center justify-between gap-4 px-5 py-4"><div><p className="text-sm font-medium">{link.label}</p><p className="mt-1 max-w-lg truncate text-xs text-[#999991]">{link.url}</p></div><span className="rounded-full bg-[#f0eee7] px-2.5 py-1 text-xs capitalize text-[#77776f]">{link.type.replace('_', ' ')}</span></div>)}{typedLinks.length === 0 && <p className="px-5 py-12 text-center text-sm text-[#77776f]">No links added yet.</p>}</div></section><QrCard url={publicUrl} name={typedBusiness.name}/></div>
-    <section className="mt-8 rounded-2xl border border-[#deded7] bg-white p-5 sm:p-6"><h2 className="font-semibold">Configuration</h2><p className="mt-1 text-xs text-[#77776f]">A read-only snapshot of this business setup. Use Manage to make changes.</p><div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4"><ConfigCard icon={Grid2X2} title="Customer features" active={enabledFeatures.length>0} lines={enabledFeatures.length?enabledFeatures.map((feature)=>featureName(feature.feature_key)):['No features enabled']}/><ConfigCard icon={ShieldCheck} title="Private Activity" active={activityItems.length>0} lines={activityItems.length?activityItems:['Not enabled']}/><ConfigCard icon={BellRing} title="Notifications" active={pushEnabled&&Boolean(pushCount.count)||emailEnabled} lines={[pushEnabled?(pushCount.count?`${pushCount.count} push ${pushCount.count===1?'device':'devices'} subscribed`:'No push devices subscribed'):'Push disabled',emailEnabled?'Email enabled':'Email disabled']}/><ConfigCard icon={CalendarCheck2} title="Integrations" active={calendarEnabled} lines={[calendarEnabled?'Google Calendar connected':'Google Calendar not connected']}/></div></section>
+    <section className="mt-8 rounded-2xl border border-[#deded7] bg-white p-5 sm:p-6"><h2 className="font-semibold">Configuration</h2><p className="mt-1 text-xs text-[#77776f]">A read-only snapshot of this business setup. Use Manage to make changes.</p><div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-5"><ConfigCard icon={Grid2X2} title="Customer features" active={enabledFeatures.length>0} lines={enabledFeatures.length?enabledFeatures.map((feature)=>featureName(feature.feature_key)):['No features enabled']}/><ConfigCard icon={ShieldCheck} title="Private Activity" active={activityItems.length>0} lines={activityItems.length?activityItems:['Not enabled']}/><ConfigCard icon={CreditCard} title="Stripe payments" active={paymentsEnabled} lines={[paymentsEnabled?'Payments and payouts enabled':featureName(paymentSettings.data?.stripe_account_status||'not_connected'),`Orders: ${featureName(paymentSettings.data?.order_payment_mode||'pay_later')}`,`Bookings: ${featureName(paymentSettings.data?.booking_payment_mode||'none')}`]}/><ConfigCard icon={BellRing} title="Notifications" active={pushEnabled&&Boolean(pushCount.count)||emailEnabled} lines={[pushEnabled?(pushCount.count?`${pushCount.count} push ${pushCount.count===1?'device':'devices'} subscribed`:'No push devices subscribed'):'Push disabled',emailEnabled?'Email enabled':'Email disabled']}/><ConfigCard icon={CalendarCheck2} title="Integrations" active={calendarEnabled} lines={[calendarEnabled?'Google Calendar connected':'Google Calendar not connected']}/></div><Link href={`/dashboard/payments?business=${id}`} className="mt-4 inline-flex text-xs font-semibold text-[#8b6b3d]">Manage payment settings →</Link></section>
 
     <div className="mt-6 grid gap-6 lg:grid-cols-2">
       <section className="rounded-2xl border border-[#deded7] bg-white p-5 sm:p-6">

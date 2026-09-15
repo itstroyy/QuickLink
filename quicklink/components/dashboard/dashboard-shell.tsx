@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
-import { BarChart3, Home, Inbox, LayoutGrid, LogOut, MoreHorizontal, Settings2, ShieldCheck } from 'lucide-react'
+import { BarChart3, BellRing, CreditCard, Home, Inbox, LayoutGrid, LogOut, Settings2, ShieldCheck } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import QuicklinkLogo from '@/components/quicklink-logo'
 import type { OwnerBusiness } from '@/lib/dashboard/business-context'
@@ -12,13 +12,15 @@ const nav = [
   { href: '/dashboard/activity', label: 'Activity', icon: Inbox },
   { href: '/dashboard/catalog', label: 'Catalog', icon: LayoutGrid },
   { href: '/dashboard/analytics', label: 'Analytics', icon: BarChart3 },
-  { href: '/dashboard/more', label: 'More', icon: MoreHorizontal },
+  { href: '/dashboard/more', label: 'Settings', icon: Settings2 },
 ]
 
 // Desktop-only: the mobile bottom bar only has room for 5 items, so Page
 // Settings lives one tap into "More" there instead (see the More page).
 const secondaryNav = [
   { href: '/dashboard/settings', label: 'Page settings', icon: Settings2 },
+  { href: '/dashboard/payments', label: 'Payments', icon: CreditCard },
+  { href: '/dashboard/integrations', label: 'Notifications', icon: BellRing },
 ]
 
 export default function DashboardShell({ children, businesses, isAdmin }: { children: React.ReactNode; businesses: OwnerBusiness[]; isAdmin: boolean }) {

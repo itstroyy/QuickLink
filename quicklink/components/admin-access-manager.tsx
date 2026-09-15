@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { Loader2, Mail, ShieldOff, UserPlus } from 'lucide-react'
 import { useFeedback } from '@/components/feedback-provider'
+import ConfirmationDialog from '@/components/confirmation-dialog'
 
 type Member = { user_id: string; role: 'owner' | 'manager'; email: string; created_at: string }
 type Invitation = { id: string; email: string; role: 'owner' | 'manager'; expires_at: string; created_at: string }
@@ -14,6 +15,7 @@ export default function AdminAccessManager({ businessId, members: initialMembers
   const [role, setRole] = useState<'owner' | 'manager'>('owner')
   const [busy, setBusy] = useState('')
   const [message, setMessage] = useState('')
+  const [pendingRevoke, setPendingRevoke] = useState<Member | null>(null)
   const notify = useFeedback()
 
   async function invite(targetEmail: string, targetRole: 'owner' | 'manager') {
@@ -47,7 +49,6 @@ export default function AdminAccessManager({ businessId, members: initialMembers
   }
 
   async function revokeMember(userId: string) {
-    if (!confirm('Revoke this person’s access to this business?')) return
     setBusy(`member-${userId}`)
     try {
       const response = await fetch('/api/admin/access/revoke', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ businessId, userId }) })
@@ -55,7 +56,7 @@ export default function AdminAccessManager({ businessId, members: initialMembers
       setMembers((rows) => rows.filter((row) => row.user_id !== userId))
       notify('Access revoked.')
     } catch { setMessage('Could not revoke access. Please try again.') }
-    finally { setBusy('') }
+    finally { setBusy(''); setPendingRevoke(null) }
   }
 
   async function cancelInvitation(id: string) {
@@ -89,7 +90,7 @@ export default function AdminAccessManager({ businessId, members: initialMembers
           <div><p className="text-sm font-medium">{member.email}</p><p className="mt-0.5 text-xs text-[#77776f]"><span className="inline-flex items-center gap-1.5 font-medium text-emerald-700"><span className="size-1.5 rounded-full bg-emerald-600"/> {member.role === 'owner' ? 'Owner active' : 'Manager active'}</span> · since {new Date(member.created_at).toLocaleDateString()}</p></div>
           <div className="flex items-center gap-2">
             <select aria-label={`Change role for ${member.email}`} value={member.role} disabled={busy === `role-${member.user_id}`} onChange={(event) => changeRole(member.user_id, event.target.value as 'owner' | 'manager')} className="form-control h-9 w-28 text-xs"><option value="owner">Owner</option><option value="manager">Manager</option></select>
-            <button type="button" disabled={busy === `member-${member.user_id}`} onClick={() => revokeMember(member.user_id)} className="icon-button text-red-600" aria-label="Revoke access"><ShieldOff size={15}/></button>
+            <button type="button" disabled={busy === `member-${member.user_id}`} onClick={() => setPendingRevoke(member)} className="icon-button text-red-600" aria-label="Revoke access"><ShieldOff size={15}/></button>
           </div>
         </div>)}
         {members.length === 0 && <p className="py-6 text-center text-sm text-[#77776f]"><span className="font-medium text-[#1d1d1b]">No owner.</span> Invite one above.</p>}
@@ -106,5 +107,6 @@ export default function AdminAccessManager({ businessId, members: initialMembers
         </div>
       })}</div>
     </section>}
+    <ConfirmationDialog open={Boolean(pendingRevoke)} title="Revoke access?" body={`${pendingRevoke?.email || 'This person'} will immediately lose access to this business.`} confirmLabel="Revoke access" busy={Boolean(pendingRevoke&&busy===`member-${pendingRevoke.user_id}`)} onCancel={()=>setPendingRevoke(null)} onConfirm={()=>{ if (pendingRevoke) return revokeMember(pendingRevoke.user_id) }}/>
   </div>
 }

@@ -2,6 +2,8 @@
 
 Quicklink is one reusable QR landing-page platform for local businesses. Client information lives in Supabase, so adding or editing a client never requires a new page file or redeployment.
 
+For the current production migration, Stripe Connect, webhook, Vercel, Resend, Calendar, and release checklist, see [`docs/PRODUCTION-SETUP.md`](docs/PRODUCTION-SETUP.md).
+
 ## One-time setup
 
 ### 1. Connect Supabase

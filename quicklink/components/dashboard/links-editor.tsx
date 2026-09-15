@@ -6,6 +6,7 @@ import { useFeedback } from '@/components/feedback-provider'
 import { createClient } from '@/lib/supabase/client'
 import { standardLinks } from '@/lib/links'
 import type { BusinessLink } from '@/lib/types'
+import { mutationErrorMessage, reportClientMutationError } from '@/lib/client-errors'
 
 // Compact rows for social/custom links — secondary to the action-first
 // public page, but still fully owner-editable (business_links already has
@@ -28,7 +29,7 @@ export default function LinksEditor({ businessId, links: initial }: { businessId
       const { error } = await supabase.from('business_links').upsert({ ...row, icon: row.icon || row.type })
       if (error) throw error
       notify('Link saved.')
-    } catch { notify('Could not save this link. Please try again.', 'error') }
+    } catch (error) { reportClientMutationError('save business link', error); notify(mutationErrorMessage('save this link', error), 'error') }
     finally { setBusy('') }
   }
 
@@ -39,7 +40,7 @@ export default function LinksEditor({ businessId, links: initial }: { businessId
       if (error) throw error
       setLinks((rows) => rows.filter((row) => row.id !== id))
       notify('Link removed.')
-    } catch { notify('Could not remove this link. Please try again.', 'error') }
+    } catch (error) { reportClientMutationError('remove business link', error); notify(mutationErrorMessage('remove this link', error), 'error') }
     finally { setBusy('') }
   }
 
