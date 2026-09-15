@@ -3,6 +3,7 @@ import { requireAdminSession } from '@/lib/admin-guard'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { sendInviteEmail } from '@/lib/email'
+import { resolveAppBaseUrl } from '@/lib/app-url'
 
 // Invites (or re-invites) a business owner/manager. Only a platform admin
 // can call this. Writing the business_invitations row uses the normal
@@ -43,7 +44,14 @@ export async function POST(request: Request) {
   const admin = createAdminClient()
   if (!admin) return NextResponse.json({ ok: true, emailSent: false, reason: 'Server is not configured to send invite emails (SUPABASE_SECRET_KEY missing) — the invitation is saved and will link automatically once this email signs in.' })
 
-  const origin = (process.env.NEXT_PUBLIC_SITE_URL || new URL(request.url).origin).replace(/\/$/, '')
+  // Root cause of invite emails pointing at localhost in production: this
+  // used to prefer NEXT_PUBLIC_SITE_URL unconditionally, so a localhost
+  // value in that env var (e.g. carried over from .env.local into a
+  // deployed environment) would win even for a real production request.
+  // resolveAppBaseUrl() decides "are we local" from the request's own
+  // origin instead, so it can only ever return a localhost URL for an
+  // actual local request — see lib/app-url.ts.
+  const origin = resolveAppBaseUrl(request)
   const redirectTo = `${origin}/auth/finish`
 
   let actionLink: string | null = null

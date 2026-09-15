@@ -20,7 +20,7 @@ const modules = [
 
 const requestDefaults: RequestServiceSettings = {
   title: 'Request Service', description: 'Tell us what you need and we’ll follow up.', show_request: true,
-  show_address: false, address_required: false, show_preferred_date: true,
+  show_address: false, address_required: false, show_preferred_date: true, preferred_date_required: false,
   show_email: true, email_required: false, show_notes: true, sms_enabled: false,
 }
 
@@ -160,6 +160,8 @@ export default function InlineBusinessFeatures({ businessId, businessSlug, data,
       ...(key === 'email_required' && value ? { show_email: true } : {}),
       ...(key === 'show_address' && !value ? { address_required: false } : {}),
       ...(key === 'show_email' && !value ? { email_required: false } : {}),
+      ...(key === 'preferred_date_required' && value ? { show_preferred_date: true } : {}),
+      ...(key === 'show_preferred_date' && !value ? { preferred_date_required: false } : {}),
     }))
   }
   function orderSetting<K extends keyof OrderCustomerSettings>(key: K, value: OrderCustomerSettings[K]) {
@@ -220,9 +222,10 @@ export default function InlineBusinessFeatures({ businessId, businessSlug, data,
           <Check label="Preferred date" checked={requestConfig.show_preferred_date} onChange={(value)=>setting('show_preferred_date',value)}/>
           <Check label="Notes" checked={requestConfig.show_notes} onChange={(value)=>setting('show_notes',value)}/>
         </div></div>
-        <div className="mt-4 grid gap-2 sm:grid-cols-2">
+        <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
           <Check label="Address required" checked={requestConfig.address_required} onChange={(value)=>setting('address_required',value)}/>
           <Check label="Email required" checked={requestConfig.email_required} onChange={(value)=>setting('email_required',value)}/>
+          <Check label="Preferred date required" checked={requestConfig.preferred_date_required} onChange={(value)=>setting('preferred_date_required',value)}/>
         </div>
         <p className="mt-4 text-xs text-[#77776f]">Saved with the main Save changes button.</p>
       </div>}

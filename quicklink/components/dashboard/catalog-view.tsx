@@ -28,6 +28,6 @@ export default function CatalogView({ business, products, services, promotions, 
   const [notifications, setNotifications] = useState(initialNotifications)
   return <div className="grid gap-6">
     <CommerceManager businessId={business.id} ready showProducts={enabledFeatures.includes('ordering')} showIntegrations={false} notifications={notifications} onNotificationsChange={setNotifications} initialProducts={products}/>
-    <div className={!enabledFeatures.some(key=>key==='booking'||key==='request_service')?'[&_#services]:hidden':''}><HubManager business={business} services={services} promotions={promotions} hours={hours} announcements={announcements} gallery={gallery} leadForms={leadForms} leads={leads} showHours={false}/></div>
+    <div className={!enabledFeatures.some(key=>key==='booking'||key==='request_service'||key==='services')?'[&_#services]:hidden':''}><HubManager business={business} services={services} promotions={promotions} hours={hours} announcements={announcements} gallery={gallery} leadForms={leadForms} leads={leads} showHours={false}/></div>
   </div>
 }

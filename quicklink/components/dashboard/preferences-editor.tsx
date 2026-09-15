@@ -60,13 +60,16 @@ export default function PreferencesEditor({ business, initialPreferences, links,
   const [productsSectionTitle, setProductsSectionTitle] = useState(initialPreferences.products_section_title || '')
   const [showPublicHours, setShowPublicHours] = useState(initialPreferences.show_public_hours)
   const [showOpenStatus, setShowOpenStatus] = useState(initialPreferences.show_open_status)
+  const [motionEnabled, setMotionEnabled] = useState(initialPreferences.motion_enabled)
+  const [showCategoryFilters, setShowCategoryFilters] = useState(initialPreferences.show_category_filters)
+  const [productLayout, setProductLayout] = useState(initialPreferences.product_layout)
   const [address, setAddress] = useState(business.address || '')
   const [reviewUrl, setReviewUrl] = useState(existingReviewLink?.url || '')
   const [sectionOrder, setSectionOrder] = useState<PublicSectionKey[]>(
     (initialPreferences.section_order.length ? initialPreferences.section_order : industryDefaultSectionOrder[initialPreferences.industry]) as PublicSectionKey[],
   )
   const [saving, setSaving] = useState(false)
-  const [savedSnapshot, setSavedSnapshot] = useState(() => JSON.stringify({ industry, primaryAction, timezone, serviceArea, fulfillmentText, productsSectionTitle, showPublicHours, showOpenStatus, address, reviewUrl, sectionOrder }))
+  const [savedSnapshot, setSavedSnapshot] = useState(() => JSON.stringify({ industry, primaryAction, timezone, serviceArea, fulfillmentText, productsSectionTitle, showPublicHours, showOpenStatus, motionEnabled, showCategoryFilters, productLayout, address, reviewUrl, sectionOrder }))
   const prevIndustryRef = useRef(initialPreferences.industry)
 
   const enabledSections = useMemo(() => computeEnabledSections({
@@ -88,7 +91,7 @@ export default function PreferencesEditor({ business, initialPreferences, links,
   const visibleOrder = useMemo(() => resolveSectionOrder({ savedOrder: sectionOrder, industry, enabledSections }), [sectionOrder, industry, enabledSections])
   const hiddenSections = useMemo(() => (Object.keys(sectionMeta) as PublicSectionKey[]).filter((key) => !enabledSections.has(key)), [enabledSections])
 
-  const currentSnapshot = JSON.stringify({ industry, primaryAction, timezone, serviceArea, fulfillmentText, productsSectionTitle, showPublicHours, showOpenStatus, address, reviewUrl, sectionOrder })
+  const currentSnapshot = JSON.stringify({ industry, primaryAction, timezone, serviceArea, fulfillmentText, productsSectionTitle, showPublicHours, showOpenStatus, motionEnabled, showCategoryFilters, productLayout, address, reviewUrl, sectionOrder })
   const dirty = currentSnapshot !== savedSnapshot
 
   useEffect(() => {
@@ -158,6 +161,9 @@ export default function PreferencesEditor({ business, initialPreferences, links,
         products_section_title: productsSectionTitle.trim() || null,
         show_public_hours: showPublicHours,
         show_open_status: showOpenStatus,
+        motion_enabled: motionEnabled,
+        show_category_filters: showCategoryFilters,
+        product_layout: productLayout,
       })
       if (prefsError) throw prefsError
 
@@ -260,6 +266,24 @@ export default function PreferencesEditor({ business, initialPreferences, links,
           <label className="flex items-center justify-between gap-4 text-sm font-medium"><span>Show open / closed status</span><input type="checkbox" checked={showOpenStatus} onChange={(event) => setShowOpenStatus(event.target.checked)} /></label>
           <p className="text-xs text-[#77776f]">The live status uses this timezone. You can hide either signal without deleting the saved schedule.</p>
         </div>
+      </section>
+
+      <section className="rounded-2xl border border-[#deded7] bg-white p-5 sm:p-6">
+        <h2 className="font-semibold">Page experience</h2>
+        <p className="mt-1 text-xs text-[#77776f]">Controls how your public page looks and behaves. New defaults match how your page already looks, so nothing changes until you adjust one.</p>
+        <div className="mt-4 grid gap-2 rounded-xl border border-[#e4e2d8] bg-[#fafaf7] p-4">
+          <label className="flex items-center justify-between gap-4 text-sm font-medium"><span>Subtle animations</span><input type="checkbox" checked={motionEnabled} onChange={(event) => setMotionEnabled(event.target.checked)} /></label>
+          <label className="flex items-center justify-between gap-4 text-sm font-medium"><span>Show product category filters</span><input type="checkbox" checked={showCategoryFilters} onChange={(event) => setShowCategoryFilters(event.target.checked)} /></label>
+          <p className="text-xs text-[#77776f]">Animations control scroll-in effects and UI transitions on your page. Category filters only show up automatically when your products use more than one category.</p>
+        </div>
+        <label className="mt-4 grid gap-1.5 text-[11px] font-semibold uppercase tracking-[.08em] text-[#77776f]"><span>Product layout</span>
+          <select className="form-control" value={productLayout} onChange={(event) => setProductLayout(event.target.value as BusinessPreferences['product_layout'])}>
+            <option value="auto">Auto (recommended)</option>
+            <option value="cards">Cards</option>
+            <option value="list">List</option>
+          </select>
+        </label>
+        <p className="mt-1.5 text-xs text-[#77776f]">Auto uses a responsive card grid that adapts to screen size. List keeps the compact row layout.</p>
       </section>
 
       <section className="rounded-2xl border border-[#deded7] bg-white p-5 sm:p-6">

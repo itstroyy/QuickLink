@@ -363,3 +363,162 @@ button.client-product.client-service-bookable:focus-visible { outline: 2px solid
 @media (prefers-reduced-motion: reduce) { .client-scene span { animation: none; } .client-link, .client-link::before, .client-link-arrow, .client-top-action, .client-top-icon, .client-quick-action > span, .client-offer, .client-service, .client-gallery img { transition: none; } }
 
 @layer base { * { @apply border-border outline-ring/50; } body { @apply bg-background text-foreground; } }
+
+/* --- Turn 10: public page interactivity/visual pass (additive, scoped) --- */
+
+/* Scroll-reveal used by <Reveal> (components/reveal.tsx) around each
+   public-page section. Reveal only ever ADDS a .ql-enter class once the
+   element scrolls into view (and never at all without JS, without
+   IntersectionObserver, or under prefers-reduced-motion), so the resting
+   state here must stay fully visible — the animation is a one-time
+   enhancement, never something content's visibility depends on. */
+.client-reveal { opacity: 1; }
+.client-reveal.ql-enter { animation: client-reveal-in .5s ease both; }
+@keyframes client-reveal-in { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: translateY(0); } }
+@media (prefers-reduced-motion: reduce) { .client-reveal.ql-enter { animation: none; } }
+
+/* Compact circular social/contact icon bar (replaces full-width link rows) */
+.client-social-bar { display: flex; gap: 10px; overflow-x: auto; padding: 2px 2px 6px; scrollbar-width: none; }
+.client-social-bar::-webkit-scrollbar { display: none; }
+.client-social-icon { position: relative; display: inline-flex; flex: 0 0 auto; align-items: center; justify-content: center; width: 46px; height: 46px; border-radius: 999px; border: 1px solid color-mix(in srgb, var(--main-text) 14%, transparent); background: color-mix(in srgb, var(--card-bg) 78%, transparent); color: var(--main-text); backdrop-filter: blur(12px); transition: transform .2s ease, border-color .2s ease, box-shadow .2s ease; }
+.client-social-icon:hover { transform: translateY(-2px); border-color: color-mix(in srgb, var(--accent) 45%, transparent); box-shadow: 0 10px 22px rgba(0,0,0,.12); }
+.client-social-icon:active { transform: translateY(0) scale(.96); }
+.client-social-icon-tip { position: absolute; bottom: calc(100% + 8px); left: 50%; transform: translateX(-50%) translateY(4px); white-space: nowrap; padding: 4px 9px; border-radius: 8px; background: color-mix(in srgb, var(--main-text) 92%, transparent); color: var(--card-bg); font-size: 10px; font-weight: 650; opacity: 0; pointer-events: none; transition: opacity .15s ease, transform .15s ease; }
+.client-social-icon:hover .client-social-icon-tip, .client-social-icon:focus-visible .client-social-icon-tip { opacity: 1; transform: translateX(-50%) translateY(0); }
+@media (max-width: 520px) { .client-social-icon-tip { display: none; } }
+
+/* Category filter chips inside the products/order step */
+.client-category-chips { display: flex; gap: 8px; overflow-x: auto; margin-bottom: 12px; padding-bottom: 2px; scrollbar-width: none; }
+.client-category-chips::-webkit-scrollbar { display: none; }
+.client-chip { flex: 0 0 auto; border-radius: 999px; padding: 7px 14px; font-size: 12px; font-weight: 650; border: 1px solid color-mix(in srgb, var(--main-text) 16%, transparent); background: color-mix(in srgb, var(--card-bg) 62%, transparent); color: var(--main-text); transition: background .2s ease, color .2s ease, border-color .2s ease; }
+.client-chip.is-active { background: var(--accent); border-color: transparent; color: var(--button-text); }
+
+/* Featured product badge */
+.client-featured-badge { display: inline-block; margin-bottom: 3px; border-radius: 999px; padding: 2px 8px; font-size: 9px; font-weight: 750; letter-spacing: .06em; text-transform: uppercase; background: color-mix(in srgb, var(--accent) 16%, transparent); color: var(--accent); }
+
+/* Category switch: brief fade so products don't just snap when filtering */
+.client-category-fade { animation: client-category-fade-in .28s ease; }
+@keyframes client-category-fade-in { from { opacity: .35; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+@media (prefers-reduced-motion: reduce) { .client-category-fade { animation: none; } }
+
+/* Product card grid (Page experience: Product layout = Cards/Auto) */
+.client-product-grid { display: grid; grid-template-columns: 1fr; gap: 12px; }
+@media (min-width: 480px) { .client-product-grid { grid-template-columns: repeat(2, 1fr); } }
+@media (min-width: 900px) { .client-product-grid { grid-template-columns: repeat(3, 1fr); } }
+.client-product-card { display: flex; flex-direction: column; overflow: hidden; border-radius: 16px; border: 1px solid color-mix(in srgb, var(--main-text) 10%, transparent); background: color-mix(in srgb, var(--button-bg) 88%, transparent); transition: transform .2s ease, box-shadow .2s ease; }
+.client-product-card:hover { transform: translateY(-3px); box-shadow: 0 14px 30px rgba(0,0,0,.12); }
+.client-product-card.just-added { animation: client-card-added .5s ease; }
+@keyframes client-card-added { 0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 55%, transparent); } 100% { box-shadow: 0 0 0 10px color-mix(in srgb, var(--accent) 0%, transparent); } }
+.client-product-card-media { position: relative; aspect-ratio: 4 / 3; background: color-mix(in srgb, var(--main-text) 6%, transparent); }
+.client-product-card-media img { width: 100%; height: 100%; object-fit: cover; }
+.client-product-card-media .client-service-thumb { display: block; width: 100%; height: 100%; }
+.client-featured-badge-overlay { position: absolute; top: 8px; left: 8px; margin: 0; background: var(--accent); color: var(--button-text); }
+.client-product-category-tag { position: absolute; top: 8px; right: 8px; margin: 0; border-radius: 999px; padding: 2px 8px; font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; background: rgba(0,0,0,.55); color: #fff; backdrop-filter: blur(6px); }
+.client-product-card-body { display: flex; flex: 1; flex-direction: column; gap: 3px; padding: 12px; }
+.client-product-card-body strong { font-size: 13px; }
+.client-product-card-body small { color: var(--muted-text); font-size: 11px; line-height: 1.4; }
+.client-product-card-footer { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: auto; padding-top: 8px; }
+.client-product-card-footer b { color: var(--accent); font-size: 13px; }
+@media (prefers-reduced-motion: reduce) { .client-product-card, .client-product-card.just-added { transition: none; animation: none; } }
+
+/* Product row cards (list layout) get the same "just added" pulse */
+.client-product.just-added { animation: client-card-added .5s ease; }
+@media (prefers-reduced-motion: reduce) { .client-product.just-added { animation: none; } }
+
+
+/* Floating back-to-top button */
+.client-back-to-top { position: fixed; right: 16px; bottom: 84px; z-index: 39; display: flex; width: 42px; height: 42px; align-items: center; justify-content: center; border-radius: 999px; border: 1px solid color-mix(in srgb, var(--main-text) 16%, transparent); background: color-mix(in srgb, var(--card-bg) 90%, transparent); color: var(--main-text); box-shadow: 0 10px 26px rgba(0,0,0,.18); backdrop-filter: blur(14px); opacity: 0; transform: translateY(10px) scale(.9); pointer-events: none; transition: opacity .2s ease, transform .2s ease; }
+.client-back-to-top.is-visible { opacity: 1; transform: translateY(0) scale(1); pointer-events: auto; }
+@media (min-width: 640px) { .client-back-to-top { bottom: 24px; } }
+@media (prefers-reduced-motion: reduce) { .client-back-to-top { transition: none; } }
+
+
+/* --- Turn 12: Request/Quote form redesign + merged Contact/Social --- */
+
+/* Contact section: address/phone/email become real tel:/mailto:/maps links */
+.client-contact-value { color: inherit; text-decoration: none; border-bottom: 1px dashed transparent; transition: border-color .15s ease; }
+.client-contact-value:hover, .client-contact-value:focus-visible { border-color: currentColor; }
+
+/* Request/Quote form: grouped fieldsets, labels above inputs, 2-col on sm+ */
+.client-request-form { display: grid; gap: 16px; }
+.client-request-group { display: grid; gap: 10px; border: 0; margin: 0; padding: 0; }
+.client-request-group legend { padding: 0 0 2px; font-size: 10px; font-weight: 750; letter-spacing: .09em; text-transform: uppercase; color: var(--muted-text); }
+.client-request-grid { display: grid; grid-template-columns: 1fr; gap: 10px; }
+@media (min-width: 560px) { .client-request-grid { grid-template-columns: 1fr 1fr; } }
+.client-request-grid-full { grid-column: 1 / -1; }
+.client-field-label { display: grid; gap: 5px; font-size: 11px; font-weight: 650; color: var(--main-text); }
+.client-field-required, .client-field-optional { margin-left: 6px; font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--muted-text); }
+.client-field-required { color: color-mix(in srgb, var(--accent) 75%, var(--muted-text)); }
+.client-field-error { color: #c0433a; font-size: 10px; font-weight: 600; }
+.client-commerce-field[aria-invalid='true'] { border-color: #c0433a; }
+.client-request-form .client-category-chips { margin: 2px 0 8px; }
+.client-error-retry { margin-left: 8px; text-decoration: underline; font-weight: 700; }
+
+/* Success state: checkmark pop + "send another request" */
+.client-request-success .client-success-check { display: flex; width: 46px; height: 46px; align-items: center; justify-content: center; border-radius: 999px; background: color-mix(in srgb, var(--accent) 16%, transparent); color: var(--accent); animation: client-success-pop .45s cubic-bezier(.2,1.4,.4,1); }
+@keyframes client-success-pop { from { transform: scale(.4); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+.client-request-success-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 10px; margin-top: 4px; }
+.client-request-again { display: inline-flex; align-items: center; gap: 6px; margin-top: 8px; border: 1px solid color-mix(in srgb, var(--main-text) 16%, transparent); border-radius: 11px; padding: 9px 13px; color: var(--main-text); font-size: 10px; font-weight: 750; background: transparent; }
+.client-request-again:hover { border-color: color-mix(in srgb, var(--accent) 45%, transparent); }
+@media (prefers-reduced-motion: reduce) { .client-request-success .client-success-check { animation: none; } }
+
+/* Footer: soften the transition from business content to Quicklink branding
+   instead of a large dead gap */
+.client-footer-divider { height: 1px; margin: 22px 0 14px; background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--main-text) 16%, transparent) 50%, transparent); }
+
+/* --- Turn 13: Request/Quote preferred-date field as a real picker --- */
+.client-date-picker { position: relative; display: flex; min-height: 44px; align-items: center; gap: 8px; border: 1px solid color-mix(in srgb, var(--main-text) 14%, transparent); border-radius: 13px; background: color-mix(in srgb, var(--button-bg) 84%, transparent); padding: 0 12px; cursor: pointer; }
+.client-date-picker:focus-within { border-color: var(--accent); }
+.client-date-picker.has-error { border-color: #c0433a; }
+.client-date-picker-icon { flex: 0 0 auto; color: var(--accent); pointer-events: none; }
+.client-date-picker-input { flex: 1; min-width: 0; border: 0; background: transparent; padding: 11px 0; color: transparent; font-size: 12px; cursor: pointer; caret-color: transparent; }
+.client-date-picker-input:focus { outline: none; }
+/* Chrome/Edge: stretch the native calendar-icon hit target over the whole
+   box so tapping anywhere (not just the tiny native icon) opens the picker.
+   Safari/Firefox fall back to the onClick + showPicker()/focus() handler. */
+.client-date-picker-input::-webkit-calendar-picker-indicator { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; padding: 0; opacity: 0; cursor: pointer; }
+.client-date-picker-placeholder { position: absolute; left: 37px; color: var(--muted-text); font-size: 12px; pointer-events: none; }
+.client-date-picker-preview { margin-top: -3px; color: var(--accent); font-size: 10px; font-weight: 700; }
+
+/* --- Turn 14: Hero identity, badges, announcement pill, CTA row, motion --- */
+
+/* Quicklink header chrome: a touch lighter than the business's own branding
+   below it, so it reads as product chrome rather than competing content. */
+.client-topbar { opacity: .92; }
+
+/* Soft glow specifically behind the logo mark, independent of the wider
+   card-level glow, so the logo reads as a deliberate focal point. */
+.client-logo::after { content: ''; position: absolute; inset: -20px; z-index: -1; border-radius: 999px; background: radial-gradient(circle, color-mix(in srgb, var(--accent) 42%, transparent), transparent 72%); filter: blur(8px); pointer-events: none; }
+
+/* Compact fulfillment badges — parsed from the existing dashboard
+   "Fulfillment note" field, never hardcoded copy. Clearing that field in
+   the dashboard removes these badges from the public page. */
+.client-hero-badges { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; }
+.client-hero-badge { display: inline-flex; align-items: center; border-radius: 999px; border: 1px solid color-mix(in srgb, var(--accent) 32%, transparent); background: color-mix(in srgb, var(--accent) 11%, transparent); padding: 5px 12px; font-size: 10px; font-weight: 700; letter-spacing: .02em; color: var(--main-text); }
+
+/* Hero announcement pill — sourced from the same dashboard-managed
+   Announcements feature (enabled + date range) that powers the full
+   Announcements section further down the page. */
+.client-hero-announcement { display: inline-flex; align-items: center; border-radius: 999px; border: 1px solid color-mix(in srgb, var(--main-text) 18%, transparent); background: color-mix(in srgb, var(--card-bg) 75%, transparent); padding: 6px 14px; font-size: 10px; font-weight: 700; letter-spacing: .03em; color: var(--muted-text); backdrop-filter: blur(10px); }
+
+/* Primary/secondary hero CTA row: dominant Order/Book/Request button plus a
+   lighter Call button. Row on wider screens, stacked on narrow phones so
+   neither button ever feels cramped. No fixed/sticky positioning. */
+.client-hero-cta-row { display: flex; flex-direction: column; gap: 10px; }
+.client-hero-cta-row .client-hero-cta { width: 100%; }
+.client-hero-cta-secondary { display: flex; min-height: 54px; width: 100%; align-items: center; justify-content: center; gap: 8px; border: 1px solid color-mix(in srgb, var(--main-text) 20%, transparent); background: color-mix(in srgb, var(--card-bg) 70%, transparent); color: var(--main-text); font-size: 14px; font-weight: 700; backdrop-filter: blur(10px); transition: transform .2s ease, border-color .2s ease; }
+.client-hero-cta-secondary:hover { transform: translateY(-2px); border-color: var(--accent); }
+.client-hero-cta-secondary:active { transform: translateY(0); }
+@media (min-width: 420px) { .client-hero-cta-row { flex-direction: row; } .client-hero-cta-row .client-hero-cta { flex: 2; } .client-hero-cta-secondary { flex: 1; } }
+
+/* Subtle above-the-fold entrance motion, gated by the dashboard "Subtle
+   animations" toggle (preferences.motion_enabled -> data-motion on <main>)
+   and prefers-reduced-motion. Unlike .client-reveal (IntersectionObserver,
+   for below-the-fold sections) the hero is visible immediately, so this
+   plays once on mount instead of on scroll. */
+[data-motion='on'] .client-hero-anim-1 { animation: client-hero-in-scale .55s ease-out both; }
+[data-motion='on'] .client-hero-anim-2 { animation: client-hero-in-up .55s ease-out .1s both; }
+[data-motion='on'] .client-hero-anim-3 { animation: client-hero-in-up .55s ease-out .2s both; }
+@keyframes client-hero-in-scale { from { opacity: 0; transform: scale(.92); } to { opacity: 1; transform: scale(1); } }
+@keyframes client-hero-in-up { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+@media (prefers-reduced-motion: reduce) { .client-hero-anim-1, .client-hero-anim-2, .client-hero-anim-3 { animation: none; } }

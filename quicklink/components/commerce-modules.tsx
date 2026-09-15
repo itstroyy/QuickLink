@@ -1,24 +1,37 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
-import { ArrowLeft, ArrowRight, Calendar, Check, ExternalLink, MessageSquareText, Minus, PackageCheck, Plus, ShieldCheck, ShoppingBag, Ticket, X } from 'lucide-react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { ArrowLeft, ArrowRight, Calendar, Check, ExternalLink, MessageSquareText, Minus, PackageCheck, Plus, RotateCcw, ShieldCheck, ShoppingBag, Ticket, X } from 'lucide-react'
 import type { BookingSettings, OrderCustomerSettings, Product, PublicPaymentConfig, RequestServiceSettings, Service } from '@/lib/types'
 import { googleCalendarUrl, icsDataUrl, outlookCalendarUrl } from '@/lib/calendar-links'
 import { formatDate, formatPhone } from '@/lib/display-format'
+import { toE164 } from '@/lib/phone'
 
 const fieldClass='client-commerce-field'
 const money=(cents:number,currency='usd')=>new Intl.NumberFormat('en-US',{style:'currency',currency:currency.toUpperCase()}).format(cents/100)
 
-export function OrderModule({businessId,businessName,products,primary,paymentConfig,settings,sectionTitle,preselectedProductId,onClearPreselected}:{businessId:string;businessName:string;products:Product[];primary:boolean;paymentConfig:PublicPaymentConfig;settings:OrderCustomerSettings;sectionTitle?:string;preselectedProductId?:string|null;onClearPreselected?:()=>void}){
+export function OrderModule({businessId,businessName,products,primary,paymentConfig,settings,sectionTitle,preselectedProductId,onClearPreselected,showCategoryFilters=true,layout='auto'}:{businessId:string;businessName:string;products:Product[];primary:boolean;paymentConfig:PublicPaymentConfig;settings:OrderCustomerSettings;sectionTitle?:string;preselectedProductId?:string|null;onClearPreselected?:()=>void;showCategoryFilters?:boolean;layout?:'list'|'cards'|'auto'}){
   const[quantities,setQuantities]=useState<Record<string,number>>({});const[step,setStep]=useState<'products'|'details'|'review'|'done'>('products');const[details,setDetails]=useState({name:'',phone:'',email:'',method:'pickup',address:'',notes:''});const[error,setError]=useState('');const[busy,setBusy]=useState(false);const[confirmed,setConfirmed]=useState<{manageUrl:string;orderReference:string;totalCents:number;paymentRequired:boolean}|null>(null)
+  const[justAdded,setJustAdded]=useState<string|null>(null)
   const selected=useMemo(()=>products.filter(p=>quantities[p.id]>0).map(p=>({...p,quantity:quantities[p.id]})),[products,quantities]);const total=selected.reduce((sum,item)=>sum+item.price_cents*item.quantity,0);const online=paymentConfig.order_payment_mode==='online_required'
+  const[activeCategory,setActiveCategory]=useState<string|null>(null);const categories=useMemo(()=>Array.from(new Set(products.map(p=>p.category).filter((c):c is string=>Boolean(c&&c.trim())))),[products]);const visibleProducts=useMemo(()=>activeCategory?products.filter(p=>p.category===activeCategory):products,[products,activeCategory])
+  const useCards=layout!=='list'
   const emailRequired=online||settings.email_required;const showEmail=emailRequired||settings.show_email;const showAddress=settings.address_required||settings.show_address||details.method==='delivery';const emailValid=!details.email||/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(details.email.trim());const detailsReady=Boolean(details.name.trim()&&(!settings.phone_required||details.phone.trim())&&(!emailRequired||details.email.trim())&&emailValid&&(!settings.address_required||details.address.trim()))
-  function quantity(id:string,amount:number){setQuantities(q=>({...q,[id]:Math.max(0,Math.min(99,(q[id]||0)+amount))}))}
+  function quantity(id:string,amount:number){setQuantities(q=>({...q,[id]:Math.max(0,Math.min(99,(q[id]||0)+amount))}));if(amount>0){setJustAdded(id);window.setTimeout(()=>setJustAdded(current=>current===id?null:current),500)}}
   useEffect(()=>{if(!preselectedProductId)return;if(products.some(p=>p.id===preselectedProductId))setQuantities(q=>({...q,[preselectedProductId]:Math.max(1,q[preselectedProductId]||0)}));onClearPreselected?.()},[preselectedProductId,products,onClearPreselected])
   async function submit(){setBusy(true);setError('');try{const response=await fetch('/api/orders',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({businessId,...details,items:selected.map(p=>({productId:p.id,quantity:p.quantity}))})});const result=await response.json();if(!response.ok)throw new Error(result.error||'Unable to start your order.');setConfirmed({manageUrl:result.manageUrl,orderReference:result.orderReference,totalCents:result.totalCents,paymentRequired:result.paymentRequired});if(result.checkoutUrl){window.location.assign(result.checkoutUrl);return}setStep('done')}catch(e){setError(e instanceof Error?e.message:'Unable to start your order.')}finally{setBusy(false)}}
   return <section id="quicklink-order" className={`client-module client-commerce ${primary?'client-module-primary':''}`}><div className="client-module-heading"><div><span className="client-module-kicker"><ShoppingBag size={13}/>Shop</span><h2>{step==='done'?'Order confirmed':sectionTitle||'Products'}</h2></div><span className="client-step">{step==='products'?'1/3':step==='details'?'2/3':step==='review'?'3/3':''}</span></div>
     {online&&!paymentConfig.payments_ready&&<p className="client-commerce-error">Online ordering is temporarily unavailable while this business finishes payment setup.</p>}
-    {step==='products'&&<>{products.length===0?<p className="py-5 text-center text-xs" style={{color:'var(--muted-text)'}}>Products are being added. Please check back soon.</p>:<div className="client-products client-order-cart">{products.map(p=><article key={p.id} className="client-product">{p.image_url?<img src={p.image_url} alt=""/>:<span className="client-service-thumb" aria-hidden="true"/>}<div><strong>{p.name}</strong>{p.description&&<small>{p.description}</small>}<b>{money(p.price_cents,paymentConfig.currency)}</b></div><div className="client-quantity"><button type="button" onClick={()=>quantity(p.id,-1)} aria-label={`Remove ${p.name}`}><Minus size={13}/></button><span>{quantities[p.id]||0}</span><button type="button" onClick={()=>quantity(p.id,1)} aria-label={`Add ${p.name}`}><Plus size={13}/></button></div></article>)}</div>}<button disabled={!selected.length||(online&&!paymentConfig.payments_ready)} className="client-commerce-next" onClick={()=>setStep('details')}>{selected.reduce((s,p)=>s+p.quantity,0)} items · {money(total,paymentConfig.currency)} <ArrowRight size={16}/></button></>}
+    {step==='products'&&<>{products.length===0?<p className="py-5 text-center text-xs" style={{color:'var(--muted-text)'}}>Products are being added. Please check back soon.</p>:<>{showCategoryFilters&&categories.length>1&&<div className="client-category-chips" role="tablist" aria-label="Filter products by category"><button type="button" role="tab" aria-selected={activeCategory===null} className={`client-chip${activeCategory===null?' is-active':''}`} onClick={()=>setActiveCategory(null)}>All</button>{categories.map(c=><button type="button" role="tab" aria-selected={activeCategory===c} key={c} className={`client-chip${activeCategory===c?' is-active':''}`} onClick={()=>setActiveCategory(c)}>{c}</button>)}</div>}<div key={activeCategory||'all'} className={`client-products client-category-fade ${useCards?'client-product-grid':'client-order-cart'}`}>{visibleProducts.map(p=>useCards?<article key={p.id} className={`client-product-card${justAdded===p.id?' just-added':''}`}>
+      <div className="client-product-card-media">{p.image_url?<img src={p.image_url} alt=""/>:<span className="client-service-thumb" aria-hidden="true"/>}{p.featured&&<span className="client-featured-badge client-featured-badge-overlay">Featured</span>}{p.category&&<span className="client-product-category-tag">{p.category}</span>}</div>
+      <div className="client-product-card-body">
+        <strong>{p.name}</strong>{p.description&&<small>{p.description}</small>}
+        <div className="client-product-card-footer">
+          <b>{money(p.price_cents,paymentConfig.currency)}</b>
+          <div className="client-quantity"><button type="button" onClick={()=>quantity(p.id,-1)} aria-label={`Remove ${p.name}`}><Minus size={13}/></button><span>{quantities[p.id]||0}</span><button type="button" onClick={()=>quantity(p.id,1)} aria-label={`Add ${p.name}`}><Plus size={13}/></button></div>
+        </div>
+      </div>
+    </article>:<article key={p.id} className={`client-product${justAdded===p.id?' just-added':''}`}>{p.image_url?<img src={p.image_url} alt=""/>:<span className="client-service-thumb" aria-hidden="true"/>}<div>{p.featured&&<span className="client-featured-badge">Featured</span>}<strong>{p.name}</strong>{p.description&&<small>{p.description}</small>}<b>{money(p.price_cents,paymentConfig.currency)}</b></div><div className="client-quantity"><button type="button" onClick={()=>quantity(p.id,-1)} aria-label={`Remove ${p.name}`}><Minus size={13}/></button><span>{quantities[p.id]||0}</span><button type="button" onClick={()=>quantity(p.id,1)} aria-label={`Add ${p.name}`}><Plus size={13}/></button></div></article>)}{visibleProducts.length===0&&<p className="py-5 text-center text-xs" style={{color:'var(--muted-text)'}}>No products in this category.</p>}</div></>}<button disabled={!selected.length||(online&&!paymentConfig.payments_ready)} className="client-commerce-next" onClick={()=>setStep('details')}>{selected.reduce((s,p)=>s+p.quantity,0)} items · {money(total,paymentConfig.currency)} <ArrowRight size={16}/></button></>}
     {step==='details'&&<div className="client-commerce-form"><input required className={fieldClass} placeholder="Name" value={details.name} onChange={e=>setDetails({...details,name:e.target.value})}/><input required={settings.phone_required} className={fieldClass} type="tel" placeholder={settings.phone_required?'Phone':'Phone (optional)'} value={details.phone} onChange={e=>setDetails({...details,phone:e.target.value})}/>{showEmail&&<input required={emailRequired} className={fieldClass} type="email" placeholder={emailRequired?'Email for your receipt and order updates':'Email (optional)'} value={details.email} onChange={e=>setDetails({...details,email:e.target.value})}/>}<div className="client-choice"><button type="button" className={details.method==='pickup'?'active':''} onClick={()=>setDetails({...details,method:'pickup'})}>Pickup</button><button type="button" className={details.method==='delivery'?'active':''} onClick={()=>setDetails({...details,method:'delivery'})}>Delivery</button></div>{showAddress&&<input required={settings.address_required} className={fieldClass} placeholder={details.method==='delivery'?(settings.address_required?'Delivery address':'Delivery address (optional)'):(settings.address_required?'Pickup customer address':'Address (optional)')} value={details.address} onChange={e=>setDetails({...details,address:e.target.value})}/>} {settings.show_notes&&<textarea className={fieldClass} rows={2} placeholder="Notes (optional)" value={details.notes} onChange={e=>setDetails({...details,notes:e.target.value})}/>} {!emailValid&&<p className="client-commerce-error">Enter a valid email address.</p>}<div className="client-commerce-nav"><button onClick={()=>setStep('products')}><ArrowLeft size={15}/>Back</button><button disabled={!detailsReady} onClick={()=>setStep('review')}>Review order <ArrowRight size={15}/></button></div></div>}
     {step==='review'&&<div className="client-order-review">
       <div className="client-order-summary">
@@ -42,10 +55,112 @@ export function OrderModule({businessId,businessName,products,primary,paymentCon
   </section>
 }
 
+const REQUEST_TYPES = ['Bulk order', 'Product question', 'Delivery', 'Something else']
+const emptyRequestForm = { name: '', phone: '', email: '', address: '', preferredDate: '', requestType: '', request: '', notes: '' }
+type RequestForm = typeof emptyRequestForm
+
+function validateRequestForm(form: RequestForm, settings: RequestServiceSettings) {
+  const errors: Partial<Record<keyof RequestForm, string>> = {}
+  if (!form.name.trim()) errors.name = 'Enter your name.'
+  if (!form.phone.trim()) errors.phone = 'Enter a phone number.'
+  else if (!toE164(form.phone)) errors.phone = 'Enter a valid phone number.'
+  if (form.email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) errors.email = 'Enter a valid email address.'
+  else if (settings.show_email && settings.email_required && !form.email.trim()) errors.email = 'Enter an email address.'
+  if (settings.show_address && settings.address_required && !form.address.trim()) errors.address = 'Enter an address.'
+  if (settings.show_preferred_date && settings.preferred_date_required && !form.preferredDate) errors.preferredDate = 'Choose a preferred date.'
+  if (form.preferredDate && form.preferredDate < new Date().toISOString().slice(0, 10)) errors.preferredDate = 'Choose today or a future date.'
+  if (settings.show_request && !form.request.trim()) errors.request = 'Tell us what you need.'
+  return errors
+}
+
 export function RequestServiceModule({businessId,businessName,settings,primary}:{businessId:string;businessName:string;settings:RequestServiceSettings;primary:boolean}){
-  const[sent,setSent]=useState<{reference:string;manageUrl:string}|null>(null);const[busy,setBusy]=useState(false);const[error,setError]=useState('');const[name,setName]=useState('');const[email,setEmail]=useState('');const[preferredDate,setPreferredDate]=useState('')
-  async function submit(formData:FormData){setBusy(true);setError('');try{const response=await fetch('/api/service-requests',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({businessId,name:formData.get('name'),phone:formData.get('phone'),email:formData.get('email'),address:formData.get('address'),preferredDate:formData.get('preferredDate'),request:formData.get('request'),notes:formData.get('notes')})});const result=await response.json();if(!response.ok)throw new Error(result.error||'Unable to send request.');setSent({reference:result.reference,manageUrl:result.manageUrl})}catch(e){setError(e instanceof Error?e.message:'Unable to send request.')}finally{setBusy(false)}}
-  return <section id="quicklink-request-service" className={`client-module client-commerce ${primary?'client-module-primary':''}`}><div className="client-module-heading"><div><span className="client-module-kicker"><MessageSquareText size={13}/>{settings.title}</span><h2>{settings.description}</h2></div></div>{sent?<div className="client-commerce-success"><Check size={26}/><strong>Request received</strong><p>{businessName} has received your request.</p><div className="client-confirmation-summary"><span>{sent.reference}</span>{preferredDate&&<strong>{formatDate(preferredDate)}</strong>}</div><p>What happens next: the business will review your request and contact you.</p>{email&&<p>We sent a confirmation to {email}.</p>}<a className="client-manage-booking" href={sent.manageUrl}>View request status <ArrowRight size={14}/></a></div>:<form action={submit} className="client-commerce-form"><input required name="name" className={fieldClass} placeholder="Name" value={name} onChange={e=>setName(e.target.value)}/><input required name="phone" type="tel" className={fieldClass} placeholder="Phone"/>{settings.show_email&&<input required={settings.email_required} name="email" type="email" className={fieldClass} placeholder={settings.email_required?'Email':'Email (recommended)'} value={email} onChange={e=>setEmail(e.target.value)}/>} {settings.show_address&&<input required={settings.address_required} name="address" className={fieldClass} placeholder={settings.address_required?'Address':'Address (optional)'}/>} {settings.show_preferred_date&&<label className="client-date-field"><span>Preferred date</span><input name="preferredDate" type="date" min={new Date().toISOString().slice(0,10)} value={preferredDate} onChange={e=>setPreferredDate(e.target.value)} className={fieldClass}/>{preferredDate&&<small>{formatDate(preferredDate)}</small>}</label>} {settings.show_request&&<textarea required name="request" className={fieldClass} rows={3} placeholder="Tell us what you need"/>} {settings.show_notes&&<textarea name="notes" className={fieldClass} rows={2} placeholder="Extra notes (optional)"/>}{error&&<p className="client-commerce-error">{error}</p>}<button disabled={busy} className="client-commerce-next">{busy?'Sending…':settings.title}<ArrowRight size={16}/></button></form>}</section>
+  const[form,setForm]=useState<RequestForm>(emptyRequestForm)
+  const[touched,setTouched]=useState<Partial<Record<keyof RequestForm,boolean>>>({})
+  const[attempted,setAttempted]=useState(false)
+  const[sent,setSent]=useState<{reference:string;manageUrl:string;email:string;preferredDate:string}|null>(null)
+  const[busy,setBusy]=useState(false);const[error,setError]=useState('')
+  const dateInputRef=useRef<HTMLInputElement>(null)
+  function openDatePicker(e:React.MouseEvent<HTMLDivElement>){if(e.target===dateInputRef.current)return;const input=dateInputRef.current;if(!input)return;if(typeof (input as any).showPicker==='function'){try{(input as any).showPicker()}catch{input.focus()}}else{input.focus();input.click()}}
+  const errors=useMemo(()=>validateRequestForm(form,settings),[form,settings])
+  const showError=(field:keyof RequestForm)=>(attempted||touched[field])?errors[field]:undefined
+  function set<K extends keyof RequestForm>(key:K,value:RequestForm[K]){setForm(f=>({...f,[key]:value}))}
+  function blur(field:keyof RequestForm){setTouched(t=>({...t,[field]:true}))}
+  function reset(){setForm(emptyRequestForm);setTouched({});setAttempted(false);setSent(null);setError('')}
+  async function submit(e:React.FormEvent){
+    e.preventDefault()
+    if(busy)return
+    setAttempted(true)
+    if(Object.keys(errors).length>0)return
+    setBusy(true);setError('')
+    try{
+      const combinedRequest=form.requestType&&form.requestType!=='Something else'?`${form.requestType} — ${form.request.trim()}`:form.request.trim()
+      const response=await fetch('/api/service-requests',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({businessId,name:form.name.trim(),phone:form.phone.trim(),email:form.email.trim(),address:form.address.trim(),preferredDate:form.preferredDate||null,request:combinedRequest,notes:form.notes.trim()})})
+      const result=await response.json()
+      if(!response.ok)throw new Error(result.error||'Unable to send request.')
+      setSent({reference:result.reference,manageUrl:result.manageUrl,email:form.email.trim(),preferredDate:form.preferredDate})
+    }catch(e){setError(e instanceof Error?e.message:'Unable to send request. Please try again.')}
+    finally{setBusy(false)}
+  }
+  return <section id="quicklink-request-service" className={`client-module client-commerce client-request-card ${primary?'client-module-primary':''}`}>
+    <div className="client-module-heading"><div><span className="client-module-kicker"><MessageSquareText size={13}/>{settings.title}</span><h2>{settings.description}</h2></div></div>
+    {sent?<div className="client-commerce-success client-request-success">
+      <span className="client-success-check"><Check size={26}/></span>
+      <strong>Request sent</strong>
+      <p>{businessName} received your request and will follow up using the contact information you provided.</p>
+      <div className="client-confirmation-summary"><span>Request #{sent.reference}</span>{sent.preferredDate&&<strong>{formatDate(sent.preferredDate)}</strong>}</div>
+      {sent.email&&<p>We sent a confirmation to {sent.email}.</p>}
+      <div className="client-request-success-actions">
+        <a className="client-manage-booking" href={sent.manageUrl}>View request status <ArrowRight size={14}/></a>
+        <button type="button" onClick={reset} className="client-request-again"><RotateCcw size={14}/>Send another request</button>
+      </div>
+    </div>:<form onSubmit={submit} noValidate className="client-request-form">
+      <fieldset className="client-request-group">
+        <legend>Contact information</legend>
+        <div className="client-request-grid">
+          <label className="client-field-label">Name<span className="client-field-required">Required</span>
+            <input className={fieldClass} value={form.name} onChange={e=>set('name',e.target.value)} onBlur={()=>blur('name')} placeholder="Your name" aria-invalid={Boolean(showError('name'))}/>
+            {showError('name')&&<small className="client-field-error">{showError('name')}</small>}
+          </label>
+          <label className="client-field-label">Phone<span className="client-field-required">Required</span>
+            <input className={fieldClass} type="tel" value={form.phone} onChange={e=>set('phone',e.target.value)} onBlur={()=>blur('phone')} placeholder="(555) 123-4567" aria-invalid={Boolean(showError('phone'))}/>
+            {showError('phone')&&<small className="client-field-error">{showError('phone')}</small>}
+          </label>
+          {settings.show_email&&<label className="client-field-label">Email<span className={settings.email_required?'client-field-required':'client-field-optional'}>{settings.email_required?'Required':'Optional'}</span>
+            <input className={fieldClass} type="email" value={form.email} onChange={e=>set('email',e.target.value)} onBlur={()=>blur('email')} placeholder="you@example.com" aria-invalid={Boolean(showError('email'))}/>
+            {showError('email')&&<small className="client-field-error">{showError('email')}</small>}
+          </label>}
+        </div>
+      </fieldset>
+      <fieldset className="client-request-group">
+        <legend>Request details</legend>
+        <div className="client-request-grid">
+          {settings.show_address&&<label className="client-field-label">Address<span className={settings.address_required?'client-field-required':'client-field-optional'}>{settings.address_required?'Required':'Optional'}</span>
+            <input className={fieldClass} value={form.address} onChange={e=>set('address',e.target.value)} onBlur={()=>blur('address')} placeholder="Street address" aria-invalid={Boolean(showError('address'))}/>
+            {showError('address')&&<small className="client-field-error">{showError('address')}</small>}
+          </label>}
+          {settings.show_preferred_date&&<label className="client-field-label">Preferred date<span className={settings.preferred_date_required?'client-field-required':'client-field-optional'}>{settings.preferred_date_required?'Required':'Optional'}</span>
+            <div className={`client-date-picker${showError('preferredDate')?' has-error':''}`} onClick={openDatePicker}>
+              <Calendar size={15} className="client-date-picker-icon" aria-hidden="true"/>
+              <input ref={dateInputRef} className="client-date-picker-input" type="date" min={new Date().toISOString().slice(0,10)} value={form.preferredDate} onChange={e=>set('preferredDate',e.target.value)} onBlur={()=>blur('preferredDate')} aria-invalid={Boolean(showError('preferredDate'))}/>
+              {!form.preferredDate&&<span className="client-date-picker-placeholder" aria-hidden="true">Tap to choose a date</span>}
+            </div>
+            {form.preferredDate&&<small className="client-date-picker-preview">{formatDate(form.preferredDate)}</small>}
+            {showError('preferredDate')&&<small className="client-field-error">{showError('preferredDate')}</small>}
+          </label>}
+          {settings.show_request&&<label className="client-field-label client-request-grid-full">What do you need?<span className="client-field-required">Required</span>
+            <div className="client-category-chips" role="tablist" aria-label="Request type">{REQUEST_TYPES.map(type=><button type="button" role="tab" aria-selected={form.requestType===type} key={type} className={`client-chip${form.requestType===type?' is-active':''}`} onClick={()=>set('requestType',form.requestType===type?'':type)}>{type}</button>)}</div>
+            <textarea className={fieldClass} rows={3} value={form.request} onChange={e=>set('request',e.target.value)} onBlur={()=>blur('request')} placeholder="Tell us what you're looking for" aria-invalid={Boolean(showError('request'))}/>
+            {showError('request')&&<small className="client-field-error">{showError('request')}</small>}
+          </label>}
+          {settings.show_notes&&<label className="client-field-label client-request-grid-full">Extra notes<span className="client-field-optional">Optional</span>
+            <textarea className={fieldClass} rows={2} value={form.notes} onChange={e=>set('notes',e.target.value)} placeholder="Anything else we should know"/>
+          </label>}
+        </div>
+      </fieldset>
+      {error&&<p className="client-commerce-error">{error}<button type="button" onClick={()=>setError('')} className="client-error-retry">Try again</button></p>}
+      <button disabled={busy} className="client-commerce-next">{busy?'Sending…':settings.title}<ArrowRight size={16}/></button>
+    </form>}
+  </section>
 }
 
 export type SelectedBookingOffer={title:string;promoCode?:string;serviceId?:string}

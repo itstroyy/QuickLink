@@ -9,14 +9,16 @@ function asDatabaseError(error: unknown): DatabaseError {
   return error && typeof error === 'object' ? error as DatabaseError : { message: error instanceof Error ? error.message : String(error) }
 }
 
-export function reportClientMutationError(context: string, error: unknown) {
+export function reportClientMutationError(context: string, error: unknown, meta?: { table?: string; keys?: string[] }) {
   if (process.env.NODE_ENV === 'production') return
   const value = asDatabaseError(error)
   console.error(`[Quicklink CRUD] ${context}`, {
-    code: value.code || null,
-    message: value.message || null,
-    details: value.details || null,
-    hint: value.hint || null,
+    code: value.code ?? null,
+    message: value.message ?? null,
+    details: value.details ?? null,
+    hint: value.hint ?? null,
+    table: meta?.table ?? null,
+    payloadKeys: meta?.keys ?? null,
   })
 }
 

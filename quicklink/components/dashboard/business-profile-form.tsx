@@ -9,6 +9,24 @@ import { mutationErrorMessage, reportClientMutationError } from '@/lib/client-er
 
 const themes: BusinessTheme[] = ['minimal', 'luxury', 'dark', 'beauty', 'automotive']
 
+// Explicit allow-list of the public.businesses columns this form can write.
+// `business` (the prop below) is NOT guaranteed to be a plain Business row —
+// callers in the owner dashboard pass down `OwnerBusiness` (Business + a
+// `role` field joined in from business_members for nav/permissions; see
+// lib/dashboard/business-context.ts) and only type-cast it back to
+// `Business`, which TypeScript allows without stripping the extra property
+// at runtime. Building the update payload from this fixed list — instead of
+// destructuring out a few known fields and spreading "everything else" —
+// means a future joined/dashboard-only property (another role-like field,
+// a computed value, anything) can never leak into a real table write again,
+// regardless of what shape the caller's object happens to have.
+const EDITABLE_BUSINESS_FIELDS = [
+  'name', 'tagline', 'description', 'category', 'phone', 'sms', 'email', 'address',
+  'logo_url', 'cover_url', 'theme', 'background_color', 'card_color', 'primary_color',
+  'button_color', 'button_text_color', 'text_color', 'secondary_text_color',
+  'border_radius', 'background_gradient',
+] as const satisfies readonly (keyof Business)[]
+
 // Business profile + appearance for the owner dashboard. Every field here is
 // editable by a business member under RLS — the protect_owner_columns
 // trigger (202609140001_business_membership.sql) only blocks id, slug,
@@ -24,12 +42,15 @@ export default function BusinessProfileForm({ business: initial }: { business: B
 
   async function save() {
     setSaving(true)
+    const editable = Object.fromEntries(EDITABLE_BUSINESS_FIELDS.map((key) => [key, business[key]])) as Pick<Business, typeof EDITABLE_BUSINESS_FIELDS[number]>
     try {
-      const { id, slug, status, created_at, updated_at, ...editable } = business
-      const { error } = await supabase.from('businesses').update(editable).eq('id', id)
+      const { error } = await supabase.from('businesses').update(editable).eq('id', business.id)
       if (error) throw error
       notify('Business profile saved.')
-    } catch (error) { reportClientMutationError('save business profile', error); notify(mutationErrorMessage('save your profile', error), 'error') }
+    } catch (error) {
+      reportClientMutationError('save business profile', error, { table: 'businesses', keys: Object.keys(editable) })
+      notify(mutationErrorMessage('save your profile', error), 'error')
+    }
     finally { setSaving(false) }
   }
 

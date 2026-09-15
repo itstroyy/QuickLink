@@ -67,6 +67,9 @@ export default async function BusinessPage({ params }: { params: Promise<{ slug:
     products_section_title: null,
     show_public_hours: true,
     show_open_status: true,
+    motion_enabled: true,
+    show_category_filters: true,
+    product_layout: 'auto',
     updated_at: business.updated_at,
   }
   const openStatus = preferences.show_open_status ? computeOpenStatus(hubData.hours, preferences.timezone || 'America/New_York') : null

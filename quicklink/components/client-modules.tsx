@@ -10,6 +10,8 @@ import { computeEnabledSections, productsSectionTitleFor, resolveSectionOrder, t
 import { OrderModule, RequestServiceModule, BookingModule } from '@/components/commerce-modules'
 import type { BookingSettings, OrderCustomerSettings, RequestServiceSettings } from '@/lib/types'
 import { orderCustomerSettings } from '@/lib/order-settings'
+import { formatPhone } from '@/lib/display-format'
+import Reveal from '@/components/reveal'
 
 const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
 const internalLinkTypes = ['phone', 'sms', 'email']
@@ -38,7 +40,7 @@ export default function ClientModules({ business, businessName, links, data, pre
   const orderingFeature = data.features.find((feature) => feature.feature_key === 'ordering')
   const orderingSettings = orderCustomerSettings(orderingFeature?.settings) as OrderCustomerSettings
   const requestFeature = data.features.find((feature) => feature.feature_key === 'request_service')
-  const requestSettings = { title: 'Request Service', description: 'Tell us what you need and we’ll follow up.', show_request: true, show_address: false, address_required: false, show_preferred_date: true, show_email: true, email_required: false, show_notes: true, sms_enabled: false, ...(requestFeature?.settings || {}) } as RequestServiceSettings
+  const requestSettings = { title: 'Request Service', description: 'Tell us what you need and we’ll follow up.', show_request: true, show_address: false, address_required: false, show_preferred_date: true, preferred_date_required: false, show_email: true, email_required: false, show_notes: true, sms_enabled: false, ...(requestFeature?.settings || {}) } as RequestServiceSettings
   const bookingFeature = data.features.find((feature) => feature.feature_key === 'booking')
   const bookingSettings = { button_title: 'Book Now', buffer_minutes: 0, minimum_notice_minutes: 60, sms_enabled: false, ...(bookingFeature?.settings || {}) } as BookingSettings
   const [sent, setSent] = useState<string | null>(null)
@@ -129,14 +131,14 @@ export default function ClientModules({ business, businessName, links, data, pre
     hasAnnouncements: data.announcements.length > 0,
     hasProducts: data.products.length > 0,
     hasOrdering: enabled.has('ordering'),
-    hasServices: data.services.length > 0,
+    hasServices: enabled.has('services') && data.services.length > 0,
     hasOffers: data.promotions.length > 0,
     hasBooking: enabled.has('booking'),
     hasRequest: enabled.has('request_service'),
     hasGallery: data.gallery.length > 0,
     hasHours: preferences.show_public_hours && data.hours.length > 0,
     hasReviewLink: Boolean(reviewLink),
-    hasContactInfo: Boolean(business.address || business.phone || business.email || preferences.service_area || preferences.fulfillment_text),
+    hasContactInfo: Boolean(business.address || business.phone || business.email || preferences.service_area || preferences.fulfillment_text) || secondaryLinks.length > 0,
     hasSecondaryLinks: secondaryLinks.length > 0,
     hasLeadForm: enabled.has('contact_form') && data.leadForms.length > 0,
   }), [data, enabled, reviewLink, secondaryLinks, business, preferences])
@@ -162,15 +164,18 @@ export default function ClientModules({ business, businessName, links, data, pre
 
       case 'products': {
         const canOrder = enabled.has('ordering')
-        if (canOrder) return <OrderModule key={key} businessId={businessId} businessName={businessName} products={data.products} settings={orderingSettings} paymentConfig={data.paymentConfig} sectionTitle={productsTitle} primary={primary === 'ordering'} preselectedProductId={orderPreselectId} onClearPreselected={() => setOrderPreselectId(null)}/>
+        if (canOrder) return <OrderModule key={key} businessId={businessId} businessName={businessName} products={data.products} settings={orderingSettings} paymentConfig={data.paymentConfig} sectionTitle={productsTitle} primary={primary === 'ordering'} preselectedProductId={orderPreselectId} onClearPreselected={() => setOrderPreselectId(null)} showCategoryFilters={preferences.show_category_filters} layout={preferences.product_layout}/>
         return <div key={key} className="grid gap-5">
           {data.products.length > 0 && <section className="client-module">
             <div className="client-module-heading"><div><span className="client-module-kicker"><ShoppingBag size={13}/> {canOrder ? 'Shop' : 'Browse'}</span><h2>{productsTitle}</h2></div></div>
-            <div className="client-products client-showcase-grid">{data.products.slice(0, 8).map((product) => {
+            <div className={`client-products ${preferences.product_layout === 'list' ? 'client-order-cart' : 'client-product-grid'}`}>{data.products.slice(0, 8).map((product) => {
               const card = <>
                 {product.image_url ? <img src={product.image_url} alt=""/> : <span className="client-service-thumb" aria-hidden="true"/>}
-                <span><strong>{product.name}</strong>{product.description && <small>{product.description}</small>}</span>
-                <b>${(product.price_cents / 100).toFixed(2)}</b>
+                <div className="client-product-body">
+                  {product.featured && <span className="client-featured-badge">Featured</span>}
+                  <strong>{product.name}</strong>{product.description && <small>{product.description}</small>}
+                  <b>${(product.price_cents / 100).toFixed(2)}</b>
+                </div>
               </>
               return <div key={product.id} className="client-product">{card}</div>
             })}</div>
@@ -213,34 +218,41 @@ export default function ClientModules({ business, businessName, links, data, pre
         </section>
 
       case 'contact': {
-        const rows: Array<{ icon: string; label: string; value: string; copy?: boolean }> = []
-        if (business.address) rows.push({ icon: 'directions', label: 'Address', value: business.address })
+        const rows: Array<{ icon: string; label: string; value: string; href?: string; copy?: boolean }> = []
+        if (business.address) rows.push({ icon: 'directions', label: 'Address', value: business.address, href: `https://maps.google.com/?q=${encodeURIComponent(business.address)}` })
         if (preferences.service_area) rows.push({ icon: 'directions', label: 'Service area', value: preferences.service_area })
-        if (business.phone) rows.push({ icon: 'phone', label: 'Phone', value: business.phone, copy: true })
-        if (business.email) rows.push({ icon: 'email', label: 'Email', value: business.email, copy: true })
-        if (!rows.length && !preferences.fulfillment_text) return null
+        if (business.phone) rows.push({ icon: 'phone', label: 'Phone', value: formatPhone(business.phone), href: `tel:${business.phone}`, copy: true })
+        if (business.email) rows.push({ icon: 'email', label: 'Email', value: business.email, href: `mailto:${business.email}`, copy: true })
+        // Merged with the old "More ways to connect" section: one card sized
+        // to whatever the business actually has configured, instead of two
+        // separate cards (one of which was often mostly empty space).
+        if (!rows.length && !preferences.fulfillment_text && secondaryLinks.length === 0) return null
         return <section key={key} className="client-module">
           <div className="client-module-heading"><div><span className="client-module-kicker"><MapPin size={13}/> Contact</span><h2>Get in touch</h2></div></div>
           {preferences.fulfillment_text && <p className="mb-3 text-[12px] leading-5" style={{ color: 'var(--muted-text)' }}>{preferences.fulfillment_text}</p>}
-          <div className="client-details !justify-start !border-0 !pt-0">{rows.map((row) => <div key={row.label}>
-            <LinkIcon name={row.icon} size={16}/><span>{row.value}</span>
+          {rows.length > 0 && <div className="client-details !justify-start !border-0 !pt-0">{rows.map((row) => <div key={row.label}>
+            <LinkIcon name={row.icon} size={16}/>
+            {row.href ? <a href={row.href} target={row.icon === 'directions' ? '_blank' : undefined} rel={row.icon === 'directions' ? 'noreferrer' : undefined} className="client-contact-value">{row.value}</a> : <span>{row.value}</span>}
             {row.copy && <button type="button" onClick={() => copyField(row.label, row.value)} className="client-top-icon !h-6 !w-6 !min-h-0" aria-label={`Copy ${row.label.toLowerCase()}`}>{copiedField === row.label ? <Check size={12}/> : <Copy size={12}/>}</button>}
-          </div>)}</div>
-        </section>
-      }
-
-      case 'links':
-        return secondaryLinks.length > 0 && <section key={key} className="client-module client-module-links">
-          <div className="client-module-heading"><div><span className="client-module-kicker">More ways to connect</span></div></div>
-          <div className="grid gap-2">{secondaryLinks.map((link) => <a
+          </div>)}</div>}
+          {secondaryLinks.length > 0 && <div className={`client-social-bar${rows.length > 0 || preferences.fulfillment_text ? ' mt-3' : ''}`}>{secondaryLinks.map((link) => <a
             key={link.id}
             href={link.url}
             onClick={() => recordLinkClick(link)}
             target={internalLinkTypes.includes(link.type) ? '_self' : '_blank'}
             rel="noreferrer"
-            className="client-link-compact"
-          ><LinkIcon name={resolveLinkIcon(link)} size={17}/><span className="truncate">{link.label}</span><ArrowRight size={14} className="client-link-arrow"/></a>)}</div>
+            className="client-social-icon"
+            title={link.label}
+            aria-label={link.label}
+          ><LinkIcon name={resolveLinkIcon(link)} size={18}/><span className="client-social-icon-tip">{link.label}</span></a>)}</div>}
         </section>
+      }
+
+      // Folded into 'contact' above so the page doesn't show a near-empty
+      // second card — kept as a key (rather than removed) so any saved
+      // section_order that still references it degrades harmlessly.
+      case 'links':
+        return null
 
       case 'lead':
         return data.leadForms.map((form) => <section key={form.id} className={`client-module ${primary === 'contact_form' ? 'client-module-primary' : ''}`}>
@@ -260,8 +272,16 @@ export default function ClientModules({ business, businessName, links, data, pre
   // side once there's room — everything else stays full-width so the page
   // doesn't turn into a patchwork on desktop.
   const pairedKeys: PublicSectionKey[] = ['hours', 'contact']
+  const motionEnabled = preferences.motion_enabled !== false
   return <div className="client-modules mt-7 grid gap-5 text-left sm:grid-cols-2">
-    {order.map((key) => <div key={key} className={pairedKeys.includes(key) ? 'sm:col-span-1' : 'sm:col-span-2'}>{renderSection(key)}</div>)}
+    {order.map((key) => {
+      const content = renderSection(key)
+      if (!content) return null
+      const className = pairedKeys.includes(key) ? 'sm:col-span-1' : 'sm:col-span-2'
+      return motionEnabled
+        ? <Reveal key={key} className={`client-reveal ${className}`}>{content}</Reveal>
+        : <div key={key} className={className}>{content}</div>
+    })}
   </div>
 }
 

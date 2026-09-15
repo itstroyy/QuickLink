@@ -181,6 +181,7 @@ export type RequestServiceSettings = {
   show_address: boolean
   address_required: boolean
   show_preferred_date: boolean
+  preferred_date_required: boolean
   show_email: boolean
   email_required: boolean
   show_notes: boolean
@@ -388,6 +389,9 @@ export type BusinessPreferences = {
   products_section_title: string | null
   show_public_hours: boolean
   show_open_status: boolean
+  motion_enabled: boolean
+  show_category_filters: boolean
+  product_layout: 'list' | 'cards' | 'auto'
   updated_at: string
 }
 
