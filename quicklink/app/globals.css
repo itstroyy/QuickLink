@@ -168,6 +168,15 @@
 .client-details span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .client-module { border: 1px solid color-mix(in srgb, var(--main-text) 14%, transparent); border-radius: 22px; padding: 18px; background: color-mix(in srgb, var(--card-bg) 72%, transparent); color: var(--main-text); box-shadow: 0 12px 30px rgba(0,0,0,.08); backdrop-filter: blur(16px); }
 .client-module-primary { border-color: color-mix(in srgb, var(--accent) 68%, transparent); box-shadow: 0 16px 38px rgba(0,0,0,.12), 0 0 28px color-mix(in srgb, var(--accent) 15%, transparent); }
+/* Brief attention pulse when Booking's "Change" sends the customer back to
+   the standalone Services section — not a permanent state, just a cue. */
+.client-module-pulse { animation: client-module-pulse-anim 1.6s ease-out 1; }
+@keyframes client-module-pulse-anim {
+  0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 55%, transparent); border-color: var(--accent); }
+  70% { box-shadow: 0 0 0 14px color-mix(in srgb, var(--accent) 0%, transparent); }
+  100% { box-shadow: none; }
+}
+@media (prefers-reduced-motion: reduce) { .client-module-pulse { animation: none; border-color: var(--accent); } }
 .client-module-heading { display: flex; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
 .client-module-heading h2, .client-announcement h2 { margin-top: 5px; font-size: 18px; font-weight: 700; letter-spacing: -.02em; }
 .client-module-heading p, .client-announcement p { margin-top: 5px; color: var(--muted-text); font-size: 12px; line-height: 1.6; }

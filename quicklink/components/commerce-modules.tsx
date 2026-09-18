@@ -158,7 +158,7 @@ export function RequestServiceModule({businessId,businessName,settings,primary}:
 }
 
 export type SelectedBookingOffer={title:string;promoCode?:string;serviceId?:string}
-export function BookingModule({businessId,businessName,services,settings,paymentConfig,primary,selectedOffer,selectedServiceId,onClearOffer,standaloneServicesVisible,entrySignal}:{businessId:string;businessName:string;services:Service[];settings:BookingSettings;paymentConfig:PublicPaymentConfig;primary:boolean;selectedOffer?:SelectedBookingOffer|null;selectedServiceId?:string|null;onClearOffer?:()=>void;onSelectService?:(id:string)=>void;onClearSelectedService?:()=>void;standaloneServicesVisible?:boolean;entrySignal?:number}){
+export function BookingModule({businessId,businessName,services,settings,paymentConfig,primary,selectedOffer,selectedServiceId,onClearOffer,standaloneServicesVisible,entrySignal,onRequestChangeService}:{businessId:string;businessName:string;services:Service[];settings:BookingSettings;paymentConfig:PublicPaymentConfig;primary:boolean;selectedOffer?:SelectedBookingOffer|null;selectedServiceId?:string|null;onClearOffer?:()=>void;onSelectService?:(id:string)=>void;onClearSelectedService?:()=>void;standaloneServicesVisible?:boolean;entrySignal?:number;onRequestChangeService?:()=>void}){
   const bookable=useMemo(()=>services.filter(s=>s.enabled&&s.bookable!==false&&(s.action_type||'bookable')==='bookable'),[services]);const initial=selectedOffer?.serviceId||selectedServiceId||bookable.length===1?selectedOffer?.serviceId||selectedServiceId||bookable[0]?.id:'';const[selectedIds,setSelectedIds]=useState<string[]>(initial?[initial]:[]);const[step,setStep]=useState<'service'|'time'|'details'|'done'>(initial?'time':'service');const[date,setDate]=useState(()=>new Date().toISOString().slice(0,10));const[time,setTime]=useState('');const[slots,setSlots]=useState<string[]>([]);const[loadingSlots,setLoadingSlots]=useState(false);const[details,setDetails]=useState({name:'',phone:'',email:'',notes:''});const[error,setError]=useState('');const[busy,setBusy]=useState(false);const[confirmed,setConfirmed]=useState<{date:string;time:string;endTime:string;manageUrl:string}|null>(null)
   // When the standalone Services section is already showing every bookable
   // service (with images/descriptions) just above this module, repeating
@@ -177,14 +177,36 @@ export function BookingModule({businessId,businessName,services,settings,payment
   // is enabled and whether a service is already selected.
   const[browseAllServices,setBrowseAllServices]=useState(false)
   const showCompactPicker=Boolean(standaloneServicesVisible)&&!browseAllServices
+  // Tracks *why* the customer is looking at Booking, so "Change"/"Back" can
+  // decide where re-choosing a service should happen:
+  //  - 'standalone': the current selection came from clicking a service (or
+  //    an offer targeting one) in the standalone Services section above —
+  //    re-choosing should go back there, not open a second list here.
+  //  - 'cta': the customer clicked the main "Book an appointment" CTA with
+  //    nothing selected — they asked to book, so Booking's own picker is
+  //    the right place to choose (and to return to on Change/Back).
+  // Defaults to 'standalone' whenever Services is visible, since that's the
+  // natural home for choosing a service in every other case (including no
+  // explicit entry signal at all, e.g. a single auto-selected service).
+  const[enteredVia,setEnteredVia]=useState<'standalone'|'cta'>('standalone')
   const selected=bookable.filter(s=>selectedIds.includes(s.id));const total=selected.reduce((sum,s)=>sum+(s.price_cents||0),0);const duration=selected.reduce((sum,s)=>sum+(s.duration_minutes||30),0);const paymentMode=paymentConfig.booking_payment_mode;const due=paymentMode==='full'?total:paymentMode==='deposit'?(paymentConfig.deposit_type==='fixed'?Math.min(total,paymentConfig.deposit_value):Math.min(total,Math.ceil(total*paymentConfig.deposit_value/100))):0;const online=due>0
-  useEffect(()=>{const id=selectedOffer?.serviceId||selectedServiceId;if(id&&bookable.some(s=>s.id===id)){setSelectedIds([id]);setStep('time')}},[selectedOffer?.serviceId,selectedServiceId,bookable])
+  useEffect(()=>{const id=selectedOffer?.serviceId||selectedServiceId;if(id&&bookable.some(s=>s.id===id)){setSelectedIds([id]);setStep('time');setEnteredVia('standalone')}},[selectedOffer?.serviceId,selectedServiceId,bookable])
   // A fresh, positive entrySignal means the customer just clicked the main
   // "Book an appointment" CTA. If nothing is selected at that moment, show
   // the full "Choose services" picker rather than the bare prompt — they
   // asked to book, so they should see services immediately, not a hint
-  // pointing them elsewhere on the page.
-  useEffect(()=>{if(!entrySignal)return;if(!selectedIds.length){setBrowseAllServices(true);setStep('service')}},[entrySignal])
+  // pointing them elsewhere on the page — and remember that Booking's own
+  // picker (not standalone Services) is where "Change"/"Back" should go.
+  useEffect(()=>{if(!entrySignal)return;if(!selectedIds.length){setBrowseAllServices(true);setStep('service');setEnteredVia('cta')}},[entrySignal])
+  // Re-choosing a service: when the current selection came from standalone
+  // Services (and that section is actually visible), send the customer back
+  // there instead of opening a duplicate list inside Booking. Otherwise —
+  // entered via the main CTA, or standalone Services is disabled — Booking's
+  // own picker is the only place to choose, so open it as before.
+  function requestChangeServices(){
+    if(standaloneServicesVisible&&enteredVia==='standalone'&&onRequestChangeService){onRequestChangeService();return}
+    setBrowseAllServices(true);setStep('service')
+  }
   useEffect(()=>{if(step!=='time'||!selectedIds.length)return;setLoadingSlots(true);setError('');setTime('');const params=new URLSearchParams({businessId,date,serviceIds:selectedIds.join(',')});fetch(`/api/booking/availability?${params}`).then(r=>r.json()).then(result=>{setSlots(result.slots||[]);if(result.error)setError(result.error)}).catch(()=>setError('Unable to load available times.')).finally(()=>setLoadingSlots(false))},[step,date,selectedIds,businessId])
   // Toggling a service must always remove it if it's already selected —
   // previously this branch was skipped whenever multi-service booking was
@@ -198,12 +220,12 @@ export function BookingModule({businessId,businessName,services,settings,payment
     {online&&!paymentConfig.payments_ready&&<p className="client-commerce-error">Online booking is temporarily unavailable while this business finishes payment setup.</p>}
     {step==='service'&&<div className="client-commerce-form">
       {showCompactPicker
-        ? <div className="client-service-compact"><p className="client-service-compact-hint">Pick a service from Services above, or choose one here.</p>{bookable.length>0&&<button type="button" className="client-service-compact-expand" onClick={()=>setBrowseAllServices(true)}>Choose a service<ArrowRight size={13}/></button>}</div>
+        ? <div className="client-service-compact"><p className="client-service-compact-hint">Pick a service from Services above, or choose one here.</p>{bookable.length>0&&<button type="button" className="client-service-compact-expand" onClick={()=>{setBrowseAllServices(true);setEnteredVia('cta')}}>Choose a service<ArrowRight size={13}/></button>}</div>
         : <div className="grid gap-2">{bookable.map(s=><button type="button" key={s.id} onClick={()=>toggle(s.id)} className={`client-service client-service-bookable ${selectedIds.includes(s.id)?'ring-2 ring-[var(--accent)]':''}`}><span className="client-service-main">{s.image_url&&<img className="client-service-thumb" src={s.image_url} alt=""/>}<span><strong>{s.name}</strong>{s.description&&<small>{s.description}</small>}</span></span><span className="text-right">{s.price_cents!=null&&<strong>{money(s.price_cents,paymentConfig.currency)}</strong>}{s.duration_minutes&&<small>{s.duration_minutes} min</small>}{selectedIds.includes(s.id)?<Check size={15}/>:<Plus size={15}/>}</span></button>)}</div>}
       {selected.length>0&&<div className="client-service-selection-summary"><p className="client-service-selection-summary-title">Selected services</p>{selected.map(s=><div key={s.id} className="client-service-selection-summary-row"><span>{s.name}</span><button type="button" onClick={()=>toggle(s.id)} aria-label={`Remove ${s.name}`}><X size={15}/></button></div>)}<p className="client-service-selection-summary-total">Total duration: {duration} min · Total price: {money(total,paymentConfig.currency)}</p></div>}
       <button disabled={!selectedIds.length||(online&&!paymentConfig.payments_ready)} className="client-commerce-next" onClick={()=>setStep('time')}>Choose a time <ArrowRight size={16}/></button>
     </div>}
-    {step==='time'&&<div className="client-commerce-form"><div className="client-selected-service"><div><small>Selected services</small><strong>{selected.map(s=>s.name).join(', ')}</strong><p>{duration} min · {money(total,paymentConfig.currency)}</p></div>{bookable.length>1&&<button type="button" onClick={()=>{setBrowseAllServices(true);setStep('service')}}>Change</button>}</div><DateField value={date} onChange={setDate} min={new Date().toISOString().slice(0,10)} ariaLabel="Appointment date"/>{loadingSlots&&<p className="text-xs" style={{color:'var(--muted-text)'}}>Loading available times…</p>}{!loadingSlots&&!error&&!slots.length&&<p className="text-xs" style={{color:'var(--muted-text)'}}>No times available that day. Try another date.</p>}{!loadingSlots&&slots.length>0&&<div className="client-time-grid">{slots.map(slot=><button type="button" key={slot} className={time===slot?'active':''} onClick={()=>setTime(slot)}>{formatTime(slot)}</button>)}</div>}{error&&<p className="client-commerce-error">{error}</p>}<div className="client-commerce-nav"><button type="button" onClick={()=>{setBrowseAllServices(true);setStep('service')}}><ArrowLeft size={15}/>Back</button><button type="button" disabled={!time} onClick={()=>setStep('details')}>Continue <ArrowRight size={15}/></button></div></div>}
+    {step==='time'&&<div className="client-commerce-form"><div className="client-selected-service"><div><small>Selected services</small><strong>{selected.map(s=>s.name).join(', ')}</strong><p>{duration} min · {money(total,paymentConfig.currency)}</p></div>{bookable.length>1&&<button type="button" onClick={requestChangeServices}>Change</button>}</div><DateField value={date} onChange={setDate} min={new Date().toISOString().slice(0,10)} ariaLabel="Appointment date"/>{loadingSlots&&<p className="text-xs" style={{color:'var(--muted-text)'}}>Loading available times…</p>}{!loadingSlots&&!error&&!slots.length&&<p className="text-xs" style={{color:'var(--muted-text)'}}>No times available that day. Try another date.</p>}{!loadingSlots&&slots.length>0&&<div className="client-time-grid">{slots.map(slot=><button type="button" key={slot} className={time===slot?'active':''} onClick={()=>setTime(slot)}>{formatTime(slot)}</button>)}</div>}{error&&<p className="client-commerce-error">{error}</p>}<div className="client-commerce-nav"><button type="button" onClick={requestChangeServices}><ArrowLeft size={15}/>Back</button><button type="button" disabled={!time} onClick={()=>setStep('details')}>Continue <ArrowRight size={15}/></button></div></div>}
     {step==='details'&&<div className="client-commerce-form"><input className={fieldClass} placeholder="Name" value={details.name} onChange={e=>setDetails({...details,name:e.target.value})}/><input className={fieldClass} type="tel" placeholder="Phone" value={details.phone} onChange={e=>setDetails({...details,phone:e.target.value})}/><input className={fieldClass} type="email" placeholder={online?'Email for your receipt':'Email (recommended)'} value={details.email} onChange={e=>setDetails({...details,email:e.target.value})}/><textarea className={fieldClass} rows={2} placeholder="Notes (optional)" value={details.notes} onChange={e=>setDetails({...details,notes:e.target.value})}/>
       <div className="client-booking-review rounded-xl border p-4 text-sm">
         <div className="client-booking-review-head"><strong>{selected.map(s=>s.name).join(', ')}</strong><span>{formatDate(date)} at {formatTime(time)} · {duration} min</span></div>

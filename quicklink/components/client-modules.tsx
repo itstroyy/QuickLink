@@ -56,12 +56,28 @@ export default function ClientModules({ business, businessName, links, data, pre
   const productsTitle = preferences.products_section_title?.trim() || productsSectionTitleFor(preferences.industry)
   const [copiedPromo, setCopiedPromo] = useState<string | null>(null)
   const [copiedField, setCopiedField] = useState<string | null>(null)
+  // Brief highlight on the standalone Services section when Booking's
+  // "Change" sends the customer back there, so it's obvious where to pick a
+  // different service from — the section itself never gets hidden/removed.
+  const [highlightServices, setHighlightServices] = useState(false)
 
   const reviewLink = useMemo(() => links.find((link) => link.type === 'google_review' || resolveLinkIcon(link) === 'google_review'), [links])
   const secondaryLinks = useMemo(() => links.filter((link) => link.id !== reviewLink?.id), [links, reviewLink])
 
   function scrollTo(id: string) {
     document.getElementById(id)?.scrollIntoView({ behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth', block: 'start' })
+  }
+
+  // Booking's "Change" control calls this (only reachable when standalone
+  // Services is enabled and the current selection came from there) instead
+  // of opening its own duplicate service list — it scrolls back to the real
+  // Services section and pulses it briefly. The current booking selection
+  // is left untouched; it only changes once the customer clicks a different
+  // service there, which flows through selectService() as usual.
+  function focusStandaloneServices() {
+    scrollTo('quicklink-services')
+    setHighlightServices(true)
+    window.setTimeout(() => setHighlightServices(false), 1600)
   }
 
   function handleOffer(offer: PublicHubData['promotions'][number]) {
@@ -189,13 +205,13 @@ export default function ClientModules({ business, businessName, links, data, pre
       }
 
       case 'services':
-        return <section key={key} className={`client-module ${primary === 'services' ? 'client-module-primary' : ''}`}>
+        return <section key={key} id="quicklink-services" className={`client-module ${primary === 'services' ? 'client-module-primary' : ''} ${highlightServices ? 'client-module-pulse' : ''}`}>
           <div className="client-module-heading"><div><span className="client-module-kicker"><CalendarDays size={13}/> Services</span><h2>Choose what you need</h2></div></div>
           <div className="grid gap-2">{data.services.map((service) => { const action=service.action_type||(service.bookable?'bookable':'display_only'); const bookable = action==='bookable' && enabled.has('booking'); const requestable=action==='request_quote'&&enabled.has('request_service'); const content = <><span className="client-service-main">{service.image_url && <img className="client-service-thumb" src={service.image_url} alt=""/>}<span><strong>{service.name}</strong>{service.description && <small>{service.description}</small>}</span></span><span className="text-right">{service.price_cents != null && <strong>${(service.price_cents / 100).toFixed(2)}</strong>}{service.duration_minutes && <small>{service.duration_minutes} min</small>}{bookable||requestable?<ArrowRight size={15}/>:<small className="client-service-view-only">Details</small>}</span></>; return bookable ? <button type="button" key={service.id} onClick={() => selectService(service.id)} className="client-service client-service-bookable">{content}</button> : requestable?<button type="button" key={service.id} onClick={()=>scrollTo('quicklink-request-service')} className="client-service client-service-bookable">{content}</button>:<div key={service.id} className="client-service client-service-static">{content}</div> })}</div>
         </section>
 
       case 'booking':
-        return <BookingModule key={key} businessId={businessId} businessName={businessName} services={data.services} settings={bookingSettings} paymentConfig={data.paymentConfig} primary={primary === 'booking'} selectedOffer={bookingOffer} selectedServiceId={bookingServiceId} onClearOffer={() => setBookingOffer(null)} onSelectService={selectService} onClearSelectedService={() => setBookingServiceId(null)} standaloneServicesVisible={enabledSections.has('services')} entrySignal={bookingCtaSignal}/>
+        return <BookingModule key={key} businessId={businessId} businessName={businessName} services={data.services} settings={bookingSettings} paymentConfig={data.paymentConfig} primary={primary === 'booking'} selectedOffer={bookingOffer} selectedServiceId={bookingServiceId} onClearOffer={() => setBookingOffer(null)} onSelectService={selectService} onClearSelectedService={() => setBookingServiceId(null)} standaloneServicesVisible={enabledSections.has('services')} entrySignal={bookingCtaSignal} onRequestChangeService={focusStandaloneServices}/>
 
       case 'request':
         return <RequestServiceModule key={key} businessId={businessId} businessName={businessName} settings={requestSettings} primary={primary === 'request_service'}/>
