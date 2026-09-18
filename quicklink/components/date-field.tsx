@@ -5,21 +5,29 @@ import { Calendar } from 'lucide-react'
 import { formatDate } from '@/lib/display-format'
 
 /**
- * A native <input type="date"> made to behave like a single clickable
- * button: the whole control opens the calendar (not just the tiny native
- * icon), with a themed icon and a consistently-formatted value on top of it.
+ * A native <input type="date"> made to look like one clean, whole-field
+ * button — while staying a real, fully interactive native date input
+ * everywhere it matters.
  *
- * The real input stays in the DOM (so mobile still gets the OS date sheet,
- * and the value/min/required semantics are all native) but is fully
- * transparent and non-interactive to the mouse — every click is handled
- * once, by the wrapper, which calls showPicker() and falls back to
- * focus()+click() where showPicker isn't supported. Keyboard users tab to
- * the wrapper itself and press Enter/Space to open the picker.
+ * The input covers the entire control (position: absolute; inset: 0) and is
+ * kept enabled and pointer-interactive; opacity: 0 only hides its own inline
+ * text/icon. That means the user's actual tap or click lands directly on
+ * the real input — no synthetic click, no reliance on showPicker() for the
+ * main interaction — so iOS opens its native date wheel and Android opens
+ * its native date dialog exactly like any other <input type="date">, and
+ * desktop browsers open their native calendar the same way they always do
+ * for a date input. The formatted value, placeholder, and calendar icon are
+ * a purely visual layer underneath (pointer-events: none) so they display
+ * the pretty formatting without ever intercepting the tap.
+ *
+ * showPicker() is kept only as a progressive enhancement for keyboard
+ * activation (Enter/Space) on browsers that support it, for people
+ * tabbing to the field rather than clicking/tapping it.
  *
  * Used anywhere Quicklink asks a customer to pick a date (Booking, Request
  * Service) so there's one date-picker pattern, not two.
  */
-export function DateField({ value, onChange, onBlur, min, placeholder = 'Choose a date', ariaLabel, invalid, id, required }: {
+export function DateField({ value, onChange, onBlur, min, placeholder = 'Choose a date', ariaLabel, invalid, id, required, disabled }: {
   value: string
   onChange: (value: string) => void
   onBlur?: () => void
@@ -29,36 +37,27 @@ export function DateField({ value, onChange, onBlur, min, placeholder = 'Choose 
   invalid?: boolean
   id?: string
   required?: boolean
+  disabled?: boolean
 }) {
   const inputRef = useRef<HTMLInputElement>(null)
 
   function openPicker() {
     const input = inputRef.current
-    if (!input) return
+    if (!input || input.disabled) return
     const withPicker = input as HTMLInputElement & { showPicker?: () => void }
     if (typeof withPicker.showPicker === 'function') {
-      try { withPicker.showPicker(); return } catch {}
+      try { withPicker.showPicker() } catch {}
     }
-    // Older/unsupported browsers: focusing (and clicking, for legacy WebKit)
-    // the native input is the closest thing to a guaranteed way to surface
-    // its own date UI.
-    input.focus()
-    input.click()
   }
-  function handleKeyDown(e: React.KeyboardEvent) {
+  function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    // The native input already handles its own click/tap on every platform;
+    // this only helps keyboard users who tabbed to the field, on browsers
+    // where Enter/Space wouldn't otherwise surface the picker.
     if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openPicker() }
   }
 
-  return <div
-    className={`client-date-field${invalid ? ' has-error' : ''}`}
-    role="button"
-    tabIndex={0}
-    aria-label={ariaLabel}
-    aria-haspopup="dialog"
-    onClick={openPicker}
-    onKeyDown={handleKeyDown}
-  >
-    <span className={`client-date-field-value${value ? '' : ' is-placeholder'}`}>{value ? formatDate(value) : placeholder}</span>
+  return <div className={`client-date-field${invalid ? ' has-error' : ''}${disabled ? ' is-disabled' : ''}`}>
+    <span className={`client-date-field-value${value ? '' : ' is-placeholder'}`} aria-hidden="true">{value ? formatDate(value) : placeholder}</span>
     <Calendar size={16} className="client-date-field-icon" aria-hidden="true"/>
     <input
       ref={inputRef}
@@ -68,10 +67,11 @@ export function DateField({ value, onChange, onBlur, min, placeholder = 'Choose 
       value={value}
       min={min}
       required={required}
-      tabIndex={-1}
-      aria-hidden="true"
+      disabled={disabled}
+      aria-label={ariaLabel}
       onChange={(e) => onChange(e.target.value)}
       onBlur={onBlur}
+      onKeyDown={handleKeyDown}
     />
   </div>
 }

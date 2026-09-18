@@ -277,18 +277,6 @@
 .client-manage-booking { display: inline-flex; align-items: center; gap: 6px; margin-top: 8px; border-radius: 11px; background: var(--accent); padding: 9px 13px; color: var(--button-text); font-size: 10px; font-weight: 750; }
 .client-confirmation-summary { display: flex; min-width: min(100%,280px); align-items: center; justify-content: space-between; gap: 12px; margin-top: 6px; border: 1px solid color-mix(in srgb,var(--main-text) 12%,transparent); border-radius: 12px; padding: 9px 11px; font-size: 10px; }
 .client-confirmation-summary strong { color: var(--accent); font-size: 11px; }
-.client-date-field { display: grid; gap: 6px; }
-.client-date-field > span { color: var(--muted-text); font-size: 9px; font-weight: 750; letter-spacing: .1em; text-transform: uppercase; }
-.client-date-field > small { color: var(--accent); font-size: 10px; font-weight: 700; }
-/* Native date input: the typed/selected value already follows the theme via
-   `color` on .client-commerce-field, but the browser's own calendar-icon
-   glyph ignores that and stays dark — invisible on a dark theme's dark
-   input background. A small light chip behind it keeps the icon visible on
-   every theme (light or dark button colors, including custom owner picks)
-   without touching the native picker itself. */
-.client-date-field input[type="date"] { color-scheme: light; }
-.client-date-field input[type="date"]::-webkit-calendar-picker-indicator { padding: 3px; margin-left: 4px; border-radius: 7px; background-color: #fff; cursor: pointer; }
-.client-date-field input[type="date"]::-webkit-datetime-edit { padding: 0; }
 .client-gallery { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 8px; }
 .client-gallery figure { position: relative; overflow: hidden; border-radius: 15px; }
 .client-gallery img { aspect-ratio: 1; width: 100%; object-fit: cover; transition: transform .35s; }
@@ -532,18 +520,28 @@ button.client-product.client-service-bookable:focus-visible { outline: 2px solid
    instead of a large dead gap */
 .client-footer-divider { height: 1px; margin: 22px 0 14px; background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--main-text) 16%, transparent) 50%, transparent); }
 
-/* Shared date-picker field (Booking + Request Service): the whole control is
-   the button — the real <input type=date> stays in the DOM for native/mobile
-   behavior but is fully transparent and non-interactive to the mouse, so
-   every click is handled exactly once by the wrapper (see date-field.tsx). */
-.client-date-field { position: relative; display: flex; min-height: 44px; align-items: center; gap: 8px; border: 1px solid color-mix(in srgb, var(--main-text) 14%, transparent); border-radius: 13px; background: color-mix(in srgb, var(--button-bg) 84%, transparent); padding: 0 12px; color: var(--main-text); cursor: pointer; transition: border-color .2s; }
+/* Shared date-picker field (Booking + Request Service): the real
+   <input type=date> covers the whole control (see date-field.tsx) and stays
+   enabled and pointer-interactive — opacity: 0 only hides its own inline
+   text/icon, so the tap itself always lands on the native input on every
+   platform. The formatted value + icon underneath are pointer-events: none
+   so they never intercept that tap; they exist purely to display nicely.
+   Surface + text are pulled from --card-bg/--main-text/--muted-text — the
+   same pairing the business already sets for readable card content — never
+   from --button-bg (paired with --button-text instead, for the CTA button,
+   not this field) and never a hardcoded white/dark value. That mismatch
+   between an unrelated surface token and an unrelated text token is what
+   let the selected date render invisible on some themes. */
+.client-date-field { position: relative; display: flex; min-height: 44px; align-items: center; gap: 8px; border: 1px solid color-mix(in srgb, var(--main-text) 14%, transparent); border-radius: 13px; background: color-mix(in srgb, var(--main-text) 5%, var(--card-bg)); padding: 0 12px; color: var(--main-text); cursor: pointer; transition: border-color .2s; }
 .client-date-field:hover { border-color: color-mix(in srgb, var(--accent) 55%, transparent); }
-.client-date-field:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-color: var(--accent); }
+.client-date-field:focus-within { outline: 2px solid var(--accent); outline-offset: 2px; border-color: var(--accent); }
 .client-date-field.has-error { border-color: #c0433a; }
-.client-date-field-value { flex: 1; min-width: 0; padding: 11px 0; font-size: 12.5px; font-weight: 650; }
+.client-date-field.is-disabled { cursor: not-allowed; opacity: .55; }
+.client-date-field-value { flex: 1; min-width: 0; padding: 11px 0; color: var(--main-text); font-size: 12.5px; font-weight: 650; pointer-events: none; }
 .client-date-field-value.is-placeholder { color: var(--muted-text); font-weight: 500; }
 .client-date-field-icon { flex: 0 0 auto; color: var(--accent); pointer-events: none; }
-.client-date-field-input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; padding: 0; border: 0; opacity: 0; pointer-events: none; }
+.client-date-field-input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; padding: 0; border: 0; opacity: 0; cursor: pointer; }
+.client-date-field-input:disabled { cursor: not-allowed; }
 
 /* --- Turn 14: Hero identity, badges, announcement pill, CTA row, motion --- */
 
