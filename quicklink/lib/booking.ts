@@ -40,7 +40,12 @@ export function computeAvailableSlots(options: {
 
   const busy = bookedRanges.map((range) => ({ start: toMinutes(range.start_time) - bufferMinutes, end: toMinutes(range.end_time) + bufferMinutes }))
 
-  const isToday = date === now.toISOString().slice(0, 10)
+  // Compare against the caller's local calendar date, not UTC — using
+  // toISOString() here compared a UTC date string against a business-local
+  // date string, which could misjudge "today" (and the minimum-notice
+  // cutoff) near midnight in timezones ahead of or behind UTC.
+  const localToday = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+  const isToday = date === localToday
   const earliestAllowed = isToday ? now.getHours() * 60 + now.getMinutes() + minimumNoticeMinutes : -Infinity
 
   const slots: string[] = []

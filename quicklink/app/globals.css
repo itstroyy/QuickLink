@@ -185,6 +185,63 @@
 .client-promo-code { display: inline-flex; align-items: center; gap: 6px; border: 1px dashed color-mix(in srgb, var(--accent) 65%, transparent); border-radius: 999px; padding: 6px 9px; color: var(--accent); background: color-mix(in srgb, var(--accent) 8%, transparent); }
 .client-promo-code code { font-size: 10px; font-weight: 800; letter-spacing: .06em; }
 .client-offer-cta { display: inline-flex; align-items: center; gap: 4px; color: var(--main-text); font-size: 9px; font-weight: 750; }
+
+/* Promo / offer campaign card — the whole thing is one interactive control
+   when the offer has an action, with a rich gradient (or the business's own
+   uploaded image) doing the visual work instead of a plain text row. */
+.client-promo-card { position: relative; isolation: isolate; overflow: hidden; display: flex; min-height: 152px; width: 100%; flex-direction: column; justify-content: flex-end; gap: 0; border: none; border-radius: 18px; padding: 18px; text-align: left; color: #fff; background: linear-gradient(135deg, color-mix(in srgb, black 16%, var(--accent)) 0%, color-mix(in srgb, black 40%, var(--accent)) 100%); box-shadow: 0 14px 30px color-mix(in srgb, var(--accent) 28%, transparent); transition: transform .22s ease, box-shadow .22s ease; }
+.client-promo-card.has-image { min-height: 190px; }
+.client-promo-card.is-actionable { cursor: pointer; }
+.client-promo-card.is-actionable:hover { transform: translateY(-3px); box-shadow: 0 20px 42px color-mix(in srgb, var(--accent) 38%, transparent); }
+.client-promo-card.is-actionable:active { transform: translateY(-1px) scale(.994); }
+.client-promo-card.is-actionable:focus-visible { outline: 2px solid #fff; outline-offset: 3px; box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 55%, transparent), 0 20px 42px color-mix(in srgb, var(--accent) 38%, transparent); }
+.client-promo-card-sheen { position: absolute; inset: 0; z-index: 0; background: radial-gradient(circle at 88% -12%, rgba(255,255,255,.28), transparent 55%); pointer-events: none; }
+.client-promo-card-image { position: absolute; inset: 0; z-index: -2; width: 100%; height: 100%; object-fit: cover; }
+.client-promo-card-scrim { position: absolute; inset: 0; z-index: -1; }
+.client-promo-card.has-image .client-promo-card-scrim { background: linear-gradient(180deg, rgba(0,0,0,.08) 0%, rgba(0,0,0,.42) 55%, rgba(0,0,0,.82) 100%); }
+.client-promo-card.no-image .client-promo-card-scrim { background: linear-gradient(180deg, rgba(255,255,255,.06), transparent 40%); }
+.client-promo-card-content { position: relative; z-index: 1; display: flex; flex-direction: column; gap: 10px; }
+.client-promo-badge { display: inline-flex; align-self: flex-start; align-items: center; gap: 4px; border: 1px solid rgba(255,255,255,.38); border-radius: 999px; padding: 5px 10px; background: rgba(255,255,255,.16); backdrop-filter: blur(6px); color: #fff; font-size: 9px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; }
+.client-promo-value { display: block; font-size: 23px; font-weight: 800; letter-spacing: -.02em; line-height: 1.15; text-shadow: 0 2px 14px rgba(0,0,0,.3); }
+.client-promo-sub { margin-top: 4px; color: rgba(255,255,255,.88); font-size: 12.5px; font-weight: 500; line-height: 1.45; }
+.client-promo-card-bottom { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 2px; }
+.client-promo-card-code { display: inline-flex; align-items: center; gap: 6px; border: 1px dashed rgba(255,255,255,.55); border-radius: 999px; padding: 6px 10px; background: rgba(255,255,255,.14); color: #fff; font-size: 11px; }
+.client-promo-card-code code { font-weight: 800; letter-spacing: .06em; }
+.client-promo-cta { display: inline-flex; align-items: center; gap: 5px; margin-left: auto; border-radius: 999px; padding: 8px 14px; background: #fff; color: color-mix(in srgb, var(--accent) 82%, black 18%); font-size: 12px; font-weight: 800; }
+.client-promo-card.is-actionable:hover .client-promo-cta-arrow, .client-promo-card.is-actionable:focus-visible .client-promo-cta-arrow { transform: translateX(3px); }
+.client-promo-cta-arrow { transition: transform .2s ease; }
+.client-promo-card.is-compact { min-height: 108px; padding: 14px; }
+.client-promo-card.is-compact .client-promo-value { font-size: 18px; }
+
+/* Compact service picker inside Booking — used only when the standalone
+   Services section already shows the full cards, so this list stays
+   functional (still selectable, still respects multiple-services) without
+   visually repeating those cards. */
+.client-service-compact-hint { margin-bottom: 8px; color: var(--muted-text); font-size: 11px; }
+.client-service-pill { display: flex; width: 100%; align-items: center; justify-content: space-between; gap: 10px; border: 1px solid color-mix(in srgb, var(--main-text) 12%, transparent); border-radius: 12px; padding: 10px 12px; background: color-mix(in srgb, var(--button-bg) 84%, transparent); color: var(--main-text); text-align: left; font-size: 12.5px; transition: border-color .2s, transform .2s; }
+.client-service-pill:hover { border-color: var(--accent); transform: translateY(-1px); }
+.client-service-pill:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.client-service-pill.is-selected { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, var(--button-bg)); }
+.client-service-pill-name { font-weight: 650; }
+.client-service-pill-meta { margin-left: auto; margin-right: 8px; color: var(--muted-text); font-size: 11px; white-space: nowrap; }
+.client-service-compact-expand { display: inline-flex; align-items: center; gap: 5px; margin-top: 10px; color: var(--accent); font-size: 11px; font-weight: 700; }
+
+/* Compact booking review — reused for the payment breakdown + policy so the
+   final step doesn't need a second, separate summary card. */
+.client-booking-review-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 6px 12px; margin-bottom: 10px; padding-bottom: 10px; border-bottom: 1px solid color-mix(in srgb, var(--main-text) 10%, transparent); }
+.client-booking-review-head strong { font-size: 13px; }
+.client-booking-review-head span { color: var(--muted-text); font-size: 11px; }
+
+/* Selected-services summary (Choose services step). Every color here is an
+   explicit token — never inherited — so it can't end up light-text-on-light
+   (or dark-on-dark) no matter what the business picked for its theme. */
+.client-service-selection-summary { border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent); border-radius: 15px; padding: 14px; background: color-mix(in srgb, var(--accent) 11%, var(--card-bg)); }
+.client-service-selection-summary-title { color: var(--accent); font-size: 10px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; }
+.client-service-selection-summary-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 8px; padding-top: 8px; border-top: 1px solid color-mix(in srgb, var(--main-text) 10%, transparent); color: var(--main-text); font-size: 13px; }
+.client-service-selection-summary-row:first-of-type { border-top: none; padding-top: 0; }
+.client-service-selection-summary-row > button { flex: 0 0 auto; color: var(--muted-text); transition: color .15s; }
+.client-service-selection-summary-row > button:hover, .client-service-selection-summary-row > button:focus-visible { color: var(--accent); }
+.client-service-selection-summary-total { margin-top: 10px; padding-top: 10px; border-top: 1px solid color-mix(in srgb, var(--main-text) 14%, transparent); color: var(--muted-text); font-size: 11px; }
 .client-service-main { display: flex; min-width: 0; align-items: center; gap: 10px; }
 .client-service-thumb { width: 48px; height: 48px; flex: 0 0 auto; border-radius: 11px; object-fit: cover; }
 .client-service > span:last-child { display: flex; flex: 0 0 auto; align-items: center; gap: 8px; }
@@ -360,7 +417,7 @@ button.client-product.client-service-bookable:focus-visible { outline: 2px solid
 .client-shell[data-industry='barbershop'][data-has-cover='true']::after { background: linear-gradient(to bottom, rgba(3,3,3,.3), rgba(3,3,3,.7) 48%, rgba(1,1,1,.94)), radial-gradient(circle at 50% 15%, transparent, rgba(0,0,0,.44) 78%); }
 
 @media (max-width: 520px) { .client-profile-card { box-shadow: 0 18px 45px rgba(0,0,0,.14); } .client-logo { width: 112px; height: 112px; } .client-top-action { padding: 0 12px; } .client-link-number { display: none; } .client-offer { align-items: stretch; flex-direction: column; } .client-offer-image { width: 100%; height: 132px; } .client-offer-body { align-items: flex-start; } }
-@media (prefers-reduced-motion: reduce) { .client-scene span { animation: none; } .client-link, .client-link::before, .client-link-arrow, .client-top-action, .client-top-icon, .client-quick-action > span, .client-offer, .client-service, .client-gallery img { transition: none; } }
+@media (prefers-reduced-motion: reduce) { .client-scene span { animation: none; } .client-link, .client-link::before, .client-link-arrow, .client-top-action, .client-top-icon, .client-quick-action > span, .client-offer, .client-service, .client-promo-card, .client-promo-cta-arrow, .client-service-pill, .client-gallery img { transition: none; } }
 
 @layer base { * { @apply border-border outline-ring/50; } body { @apply bg-background text-foreground; } }
 
@@ -466,19 +523,18 @@ button.client-product.client-service-bookable:focus-visible { outline: 2px solid
    instead of a large dead gap */
 .client-footer-divider { height: 1px; margin: 22px 0 14px; background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--main-text) 16%, transparent) 50%, transparent); }
 
-/* --- Turn 13: Request/Quote preferred-date field as a real picker --- */
-.client-date-picker { position: relative; display: flex; min-height: 44px; align-items: center; gap: 8px; border: 1px solid color-mix(in srgb, var(--main-text) 14%, transparent); border-radius: 13px; background: color-mix(in srgb, var(--button-bg) 84%, transparent); padding: 0 12px; cursor: pointer; }
-.client-date-picker:focus-within { border-color: var(--accent); }
-.client-date-picker.has-error { border-color: #c0433a; }
-.client-date-picker-icon { flex: 0 0 auto; color: var(--accent); pointer-events: none; }
-.client-date-picker-input { flex: 1; min-width: 0; border: 0; background: transparent; padding: 11px 0; color: transparent; font-size: 12px; cursor: pointer; caret-color: transparent; }
-.client-date-picker-input:focus { outline: none; }
-/* Chrome/Edge: stretch the native calendar-icon hit target over the whole
-   box so tapping anywhere (not just the tiny native icon) opens the picker.
-   Safari/Firefox fall back to the onClick + showPicker()/focus() handler. */
-.client-date-picker-input::-webkit-calendar-picker-indicator { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; padding: 0; opacity: 0; cursor: pointer; }
-.client-date-picker-placeholder { position: absolute; left: 37px; color: var(--muted-text); font-size: 12px; pointer-events: none; }
-.client-date-picker-preview { margin-top: -3px; color: var(--accent); font-size: 10px; font-weight: 700; }
+/* Shared date-picker field (Booking + Request Service): the whole control is
+   the button — the real <input type=date> stays in the DOM for native/mobile
+   behavior but is fully transparent and non-interactive to the mouse, so
+   every click is handled exactly once by the wrapper (see date-field.tsx). */
+.client-date-field { position: relative; display: flex; min-height: 44px; align-items: center; gap: 8px; border: 1px solid color-mix(in srgb, var(--main-text) 14%, transparent); border-radius: 13px; background: color-mix(in srgb, var(--button-bg) 84%, transparent); padding: 0 12px; color: var(--main-text); cursor: pointer; transition: border-color .2s; }
+.client-date-field:hover { border-color: color-mix(in srgb, var(--accent) 55%, transparent); }
+.client-date-field:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-color: var(--accent); }
+.client-date-field.has-error { border-color: #c0433a; }
+.client-date-field-value { flex: 1; min-width: 0; padding: 11px 0; font-size: 12.5px; font-weight: 650; }
+.client-date-field-value.is-placeholder { color: var(--muted-text); font-weight: 500; }
+.client-date-field-icon { flex: 0 0 auto; color: var(--accent); pointer-events: none; }
+.client-date-field-input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; padding: 0; border: 0; opacity: 0; pointer-events: none; }
 
 /* --- Turn 14: Hero identity, badges, announcement pill, CTA row, motion --- */
 

@@ -262,6 +262,9 @@ export type BookingSettings = {
   buffer_minutes: number
   minimum_notice_minutes: number
   sms_enabled: boolean
+  // How far apart generated time slots are (15/30/60 min). Optional so
+  // existing saved settings without it keep working — callers default to 15.
+  slot_interval_minutes?: number
 }
 
 export type PublicPaymentConfig = {

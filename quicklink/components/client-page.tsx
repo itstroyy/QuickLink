@@ -31,6 +31,11 @@ export default function ClientPage({ business, links, hubData, preferences, open
 }) {
   const notify = useFeedback()
   const [copied, setCopied] = useState(false)
+  // Increments each time the hero "Book an appointment" CTA is clicked, so
+  // Booking can distinguish that explicit request from an organic scroll or
+  // a service/offer click landing on the same section. Not read anywhere
+  // else — it only ever matters to BookingModule, threaded through below.
+  const [bookingCtaSignal, setBookingCtaSignal] = useState(0)
   const radius = business.border_radius === 'round' ? 'rounded-[2rem]' : business.border_radius === 'sharp' ? 'rounded-lg' : 'rounded-2xl'
   const internalTypes = ['phone', 'sms', 'email']
   const isBarbershop = business.category?.toLowerCase().includes('barber') || business.name.toLowerCase().includes('cutz')
@@ -123,6 +128,7 @@ export default function ClientPage({ business, links, hubData, preferences, open
   function scrollToCta() {
     if (!heroCta || heroCta.kind !== 'scroll') return
     fetch('/api/analytics', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ businessId: business.id, eventType: 'feature_click', metadata: { feature: 'hero_cta', target: heroCta.target } }), keepalive: true }).catch(() => {})
+    if (heroCta.target === 'quicklink-booking') setBookingCtaSignal((count) => count + 1)
     document.getElementById(heroCta.target)?.scrollIntoView({ behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth', block: 'start' })
   }
 
@@ -204,7 +210,7 @@ export default function ClientPage({ business, links, hubData, preferences, open
             </a>)}
           </div>}
 
-          {hubData && preferences && <ClientModules business={business} businessName={business.name} links={links} data={hubData} preferences={preferences} openStatus={openStatus ?? null}/>}
+          {hubData && preferences && <ClientModules business={business} businessName={business.name} links={links} data={hubData} preferences={preferences} openStatus={openStatus ?? null} bookingCtaSignal={bookingCtaSignal}/>}
         </div>
       </section>
 

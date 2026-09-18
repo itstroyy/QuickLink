@@ -25,7 +25,7 @@ const requestDefaults: RequestServiceSettings = {
 }
 
 const bookingDefaults: BookingSettings = {
-  button_title: 'Book Now', buffer_minutes: 0, minimum_notice_minutes: 60, sms_enabled: false,
+  button_title: 'Book Now', buffer_minutes: 0, minimum_notice_minutes: 60, sms_enabled: false, slot_interval_minutes: 15,
 }
 
 export type InlineCommerceData = {
@@ -232,12 +232,13 @@ export default function InlineBusinessFeatures({ businessId, businessSlug, data,
 
       {enabled('booking') && <div className="mt-5 rounded-2xl border border-[#dedbd2] bg-[#faf9f5] p-4 sm:p-5">
         <div className="mb-4"><h3 className="font-semibold">Booking settings</h3><p className="mt-1 text-xs text-[#77776f]">Customers pick from the services and weekly hours below — manage those from <Link href={`/admin/clients/${businessId}/hub`} className="underline">Services &amp; hours</Link>.</p></div>
-        <div className="grid gap-4 sm:grid-cols-3">
+        <div className="grid gap-4 sm:grid-cols-4">
           <Field label="Button title"><input className="form-control" value={bookingConfig.button_title} onChange={(event)=>bookingSetting('button_title',event.target.value)} placeholder="Book Now"/></Field>
+          <Field label="Slot interval"><select className="form-control" value={bookingConfig.slot_interval_minutes??15} onChange={(event)=>bookingSetting('slot_interval_minutes',Number(event.target.value))}><option value={15}>Every 15 min</option><option value={30}>Every 30 min</option><option value={60}>Every 60 min</option></select></Field>
           <Field label="Buffer time (minutes)"><input className="form-control" type="number" min="0" step="5" value={bookingConfig.buffer_minutes} onChange={(event)=>bookingSetting('buffer_minutes',Math.max(0,Number(event.target.value)||0))}/></Field>
           <Field label="Minimum notice (minutes)"><input className="form-control" type="number" min="0" step="15" value={bookingConfig.minimum_notice_minutes} onChange={(event)=>bookingSetting('minimum_notice_minutes',Math.max(0,Number(event.target.value)||0))}/></Field>
         </div>
-        <p className="mt-3 text-xs text-[#77776f]">Buffer time blocks extra minutes before and after each appointment. Minimum notice is how far ahead a customer must book (e.g. 60 = at least an hour from now). Saved with the main Save changes button below.</p>
+        <p className="mt-3 text-xs text-[#77776f]">Slot interval controls how far apart bookable times are shown (e.g. 9:00, 9:15, 9:30…). Buffer time blocks extra minutes before and after each appointment. Minimum notice is how far ahead a customer must book (e.g. 60 = at least an hour from now). Saved with the main Save changes button below.</p>
       </div>}
     </section>
     <CommerceManager businessId={businessId} ready={data.ready} showProducts={enabled('ordering')} initialProducts={data.products} notifications={notifications} onNotificationsChange={setNotifications}/>

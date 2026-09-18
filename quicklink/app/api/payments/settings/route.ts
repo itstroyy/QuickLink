@@ -22,6 +22,18 @@ export async function POST(request: Request) {
     }
     const admin = createAdminClient()
     if (!admin) return NextResponse.json({ error: 'Server configuration is incomplete.' }, { status: 503 })
+    // Mirror the dashboard UI's guard server-side: never let a business turn
+    // on a booking payment mode that would actually try to collect money
+    // through a Stripe account that isn't live-ready. (Legacy
+    // stripe_charges_enabled/stripe_payouts_enabled always mirror the LIVE
+    // account — the same fields the booking/order RPCs gate real checkout
+    // on — so this matches what would actually happen to a real customer.)
+    if (body.booking_payment_mode === 'full' || body.booking_payment_mode === 'deposit') {
+      const { data: readiness } = await admin.from('business_payment_settings').select('stripe_charges_enabled,stripe_payouts_enabled').eq('business_id', session.businessId).single()
+      if (!readiness?.stripe_charges_enabled || !readiness?.stripe_payouts_enabled) {
+        return NextResponse.json({ error: 'Connect Stripe and finish onboarding before requiring online payment for bookings.' }, { status: 400 })
+      }
+    }
     const { error } = await admin.from('business_payment_settings').update({
       order_payment_mode: body.order_payment_mode,
       booking_payment_mode: body.booking_payment_mode,

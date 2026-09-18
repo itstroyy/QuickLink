@@ -8,6 +8,7 @@ import { LinkIcon, resolveLinkIcon } from '@/components/link-icon'
 import type { OpenStatus } from '@/lib/business-hours'
 import { computeEnabledSections, productsSectionTitleFor, resolveSectionOrder, type PublicSectionKey } from '@/lib/section-order'
 import { OrderModule, RequestServiceModule, BookingModule } from '@/components/commerce-modules'
+import { PromoCard } from '@/components/promo-card'
 import type { BookingSettings, OrderCustomerSettings, RequestServiceSettings } from '@/lib/types'
 import { orderCustomerSettings } from '@/lib/order-settings'
 import { formatPhone } from '@/lib/display-format'
@@ -25,13 +26,17 @@ function event(businessId: string, eventType: string, metadata: Record<string, s
   fetch('/api/analytics', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ businessId, eventType, visitorId, metadata }), keepalive: true }).catch(() => {})
 }
 
-export default function ClientModules({ business, businessName, links, data, preferences, openStatus }: {
+export default function ClientModules({ business, businessName, links, data, preferences, openStatus, bookingCtaSignal }: {
   business: Business
   businessName: string
   links: BusinessLink[]
   data: PublicHubData
   preferences: BusinessPreferences
   openStatus: OpenStatus | null
+  // Increments each time the hero "Book an appointment" CTA is clicked, so
+  // BookingModule can tell that explicit request apart from an organic
+  // scroll or a service/offer selection landing on the same section.
+  bookingCtaSignal?: number
 }) {
   const businessId = business.id
   const notify = useFeedback()
@@ -159,7 +164,7 @@ export default function ClientModules({ business, businessName, links, data, pre
       case 'offers':
         return <section key={key} className={`client-module ${primary === 'special_offers' ? 'client-module-primary' : ''}`}>
           <div className="client-module-heading"><div><span className="client-module-kicker"><Sparkles size={13}/> Current offers</span><h2>Something special</h2></div></div>
-          <div className="grid gap-3">{data.promotions.map((offer) => <article key={offer.id} className="client-offer">{offer.image_url && <img className="client-offer-image" src={offer.image_url} alt=""/>}<div className="client-offer-body"><span>{offer.badge && <small>{offer.badge}</small>}<strong>{offer.title}</strong>{offer.description && <em>{offer.description}</em>}</span><div className="client-offer-actions">{offer.promo_code && <button type="button" className="client-promo-code" onClick={() => copyPromo(offer.promo_code!)} aria-label={`Copy promo code ${offer.promo_code}`}><code>{offer.promo_code}</code>{copiedPromo === offer.promo_code ? <Check size={12}/> : <Copy size={12}/>}</button>}{offer.action_type !== 'none' && <button type="button" className="client-offer-cta" onClick={() => handleOffer(offer)}>{offer.cta_label || defaultCtaLabel(offer.action_type)}<ArrowRight size={13}/></button>}</div></div></article>)}</div>
+          <div className="grid gap-3">{data.promotions.map((offer) => <PromoCard key={offer.id} offer={offer} copied={copiedPromo === offer.promo_code} onCopyCode={copyPromo} onActivate={() => handleOffer(offer)}/>)}</div>
         </section>
 
       case 'products': {
@@ -190,7 +195,7 @@ export default function ClientModules({ business, businessName, links, data, pre
         </section>
 
       case 'booking':
-        return <BookingModule key={key} businessId={businessId} businessName={businessName} services={data.services} settings={bookingSettings} paymentConfig={data.paymentConfig} primary={primary === 'booking'} selectedOffer={bookingOffer} selectedServiceId={bookingServiceId} onClearOffer={() => setBookingOffer(null)} onSelectService={selectService} onClearSelectedService={() => setBookingServiceId(null)}/>
+        return <BookingModule key={key} businessId={businessId} businessName={businessName} services={data.services} settings={bookingSettings} paymentConfig={data.paymentConfig} primary={primary === 'booking'} selectedOffer={bookingOffer} selectedServiceId={bookingServiceId} onClearOffer={() => setBookingOffer(null)} onSelectService={selectService} onClearSelectedService={() => setBookingServiceId(null)} standaloneServicesVisible={enabledSections.has('services')} entrySignal={bookingCtaSignal}/>
 
       case 'request':
         return <RequestServiceModule key={key} businessId={businessId} businessName={businessName} settings={requestSettings} primary={primary === 'request_service'}/>
@@ -283,16 +288,4 @@ export default function ClientModules({ business, businessName, links, data, pre
         : <div key={key} className={className}>{content}</div>
     })}
   </div>
-}
-
-function defaultCtaLabel(actionType: string) {
-  switch (actionType) {
-    case 'order_now': return 'Order Now'
-    case 'booking': return 'Book Offer'
-    case 'request_service': return 'Request Service'
-    case 'external_link': return 'Learn More'
-    case 'call': return 'Call'
-    case 'text': return 'Text'
-    default: return ''
-  }
 }

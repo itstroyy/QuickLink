@@ -54,6 +54,7 @@ export async function GET(request: Request) {
       bufferMinutes: settings.buffer_minutes ?? 0,
       minimumNoticeMinutes: settings.minimum_notice_minutes ?? 0,
       bookedRanges,
+      stepMinutes: settings.slot_interval_minutes || 15,
     })
     return NextResponse.json({ slots })
   } catch (error) {
